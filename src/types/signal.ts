@@ -1,0 +1,204 @@
+/**
+ * Signal Types - Core domain types for Flare
+ */
+
+// ============================================
+// Scope
+// ============================================
+
+export interface SignalScope {
+  /** Chain IDs to monitor (e.g., [1, 8453]) */
+  chains: number[];
+  /** Morpho market IDs (optional) */
+  markets?: string[];
+  /** Addresses to track (optional) */
+  addresses?: string[];
+  /** Protocol filter */
+  protocol?: 'morpho' | 'all';
+}
+
+// ============================================
+// Time Window
+// ============================================
+
+export interface TimeWindow {
+  /** Duration string (e.g., "1h", "7d", "30m") */
+  duration: string;
+  /** Optional: override with block-based lookback */
+  lookback_blocks?: number;
+}
+
+// ============================================
+// Metrics
+// ============================================
+
+export type MetricType =
+  // Position metrics (per address per market)
+  | 'supply_assets'
+  | 'supply_shares'
+  | 'borrow_assets'
+  | 'borrow_shares'
+  | 'collateral_assets'
+  // Market metrics (aggregate)
+  | 'market_total_supply'
+  | 'market_total_borrow'
+  | 'market_utilization'
+  | 'market_borrow_rate'
+  // Flow metrics (event-based)
+  | 'net_supply_flow'
+  | 'net_borrow_flow'
+  | 'liquidation_volume'
+  | 'event_count';
+
+// ============================================
+// Conditions
+// ============================================
+
+export type ComparisonOperator = '>' | '<' | '>=' | '<=' | '==' | '!=';
+
+export interface ThresholdCondition {
+  type: 'threshold';
+  metric: MetricType;
+  operator: ComparisonOperator;
+  value: number;
+  /** Filter to specific market */
+  market_id?: string;
+  /** Filter to specific address */
+  address?: string;
+}
+
+export interface ChangeCondition {
+  type: 'change';
+  metric: MetricType;
+  direction: 'increase' | 'decrease' | 'any';
+  by: { percent: number } | { absolute: number };
+  /** Filter to specific market */
+  market_id?: string;
+  /** Filter to specific address */
+  address?: string;
+}
+
+export interface GroupCondition {
+  type: 'group';
+  /** Addresses to check */
+  addresses: string[];
+  /** N of M requirement */
+  requirement: {
+    count: number;
+    of: number;
+  };
+  /** Condition each address must meet */
+  condition: Condition;
+}
+
+export interface AggregateCondition {
+  type: 'aggregate';
+  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count';
+  metric: MetricType;
+  operator: ComparisonOperator;
+  value: number;
+}
+
+export type Condition =
+  | ThresholdCondition
+  | ChangeCondition
+  | GroupCondition
+  | AggregateCondition;
+
+// ============================================
+// Signal Definition
+// ============================================
+
+export interface SignalDefinition {
+  scope: SignalScope;
+  conditions: Condition[];
+  /** How conditions combine (default: AND) */
+  logic?: 'AND' | 'OR';
+  window: TimeWindow;
+}
+
+// ============================================
+// Signal Entity
+// ============================================
+
+export interface Signal {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  definition: SignalDefinition;
+  webhook_url: string;
+  cooldown_minutes: number;
+  is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
+  last_triggered_at?: Date;
+  last_evaluated_at?: Date;
+}
+
+export interface CreateSignalInput {
+  user_id: string;
+  name: string;
+  description?: string;
+  definition: SignalDefinition;
+  webhook_url: string;
+  cooldown_minutes?: number;
+}
+
+export interface UpdateSignalInput {
+  name?: string;
+  description?: string;
+  definition?: SignalDefinition;
+  webhook_url?: string;
+  cooldown_minutes?: number;
+  is_active?: boolean;
+}
+
+// ============================================
+// Evaluation
+// ============================================
+
+export interface ConditionResult {
+  type: string;
+  triggered: boolean;
+  description: string;
+  actual_value?: number;
+  threshold?: number;
+  details?: Record<string, unknown>;
+}
+
+export interface EvaluationResult {
+  signal_id: string;
+  triggered: boolean;
+  evaluated_at: Date;
+  conditions_met: ConditionResult[];
+  context: Record<string, unknown>;
+}
+
+// ============================================
+// Webhook
+// ============================================
+
+export interface WebhookPayload {
+  signal_id: string;
+  signal_name: string;
+  triggered_at: string;
+  scope: SignalScope;
+  conditions_met: ConditionResult[];
+  context: Record<string, unknown>;
+}
+
+// ============================================
+// Notification Log
+// ============================================
+
+export interface NotificationLog {
+  id: string;
+  signal_id: string;
+  triggered_at: Date;
+  payload: WebhookPayload;
+  webhook_status?: number;
+  webhook_response_time_ms?: number;
+  retry_count: number;
+  created_at: Date;
+}
