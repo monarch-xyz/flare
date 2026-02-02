@@ -2,7 +2,7 @@ import axios from 'axios';
 import { WebhookPayload } from '../types/index.js';
 import pino from 'pino';
 
-const logger = pino();
+const logger = (pino as any)() as pino.Logger;
 
 export interface NotificationResult {
   success: boolean;
@@ -11,12 +11,6 @@ export interface NotificationResult {
   durationMs: number;
 }
 
-/**
- * Core Notification Dispatcher
- * 
- * Flare follows a strict "everything is a webhook" architecture.
- * Specific channels (Telegram, Discord) are reached via external tunnel services.
- */
 export async function dispatchNotification(
   url: string,
   payload: WebhookPayload,

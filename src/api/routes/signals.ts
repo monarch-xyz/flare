@@ -3,8 +3,8 @@ import { SignalRepository } from '../../db/index.js';
 import { CreateSignalSchema } from '../validators.js';
 import pino from 'pino';
 
-const logger = pino();
-const router = express.Router();
+const logger = (pino as any)() as pino.Logger;
+const router: express.Router = express.Router();
 const repo = new SignalRepository();
 
 // Create Signal

@@ -3,7 +3,7 @@ import { setupWorker } from './processor.js';
 import { initDb } from '../db/index.js';
 import pino from 'pino';
 
-const logger = pino();
+const logger = (pino as any)() as pino.Logger;
 
 const start = async () => {
   try {

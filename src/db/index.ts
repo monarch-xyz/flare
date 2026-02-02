@@ -3,7 +3,7 @@ import { config } from '../config/index.js';
 import { schema } from './schema.js';
 import pino from 'pino';
 
-const logger = pino();
+const logger = (pino as any)() as pino.Logger;
 const { Pool } = pg;
 
 export const pool = new Pool({

@@ -7,14 +7,12 @@ import { config } from '../config/index.js';
 import pino from 'pino';
 import IORedis from 'ioredis';
 
-const logger = pino();
-const connection = new IORedis(config.database.url.replace('postgresql', 'redis').split('?')[0] || 'redis://localhost:6379');
+const logger = (pino as any)() as pino.Logger;
+
+const connection = new (IORedis as any)(config.database.url.replace('postgresql', 'redis').split('?')[0] || 'redis://localhost:6379');
 
 export const signalQueue = new Queue('signal-evaluation', { connection });
 
-/**
- * Worker Logic: Evaluates a single signal
- */
 export const setupWorker = () => {
   const envio = new EnvioClient();
   const evaluator = new SignalEvaluator(envio);
@@ -24,19 +22,15 @@ export const setupWorker = () => {
     logger.info({ signalId }, 'Evaluating signal');
 
     try {
-      // 1. Fetch signal from DB
       const { rows } = await pool.query('SELECT * FROM signals WHERE id = $1', [signalId]);
       const signal = rows[0];
       if (!signal || !signal.is_active) return;
 
-      // 2. Evaluate
       const result = await evaluator.evaluate(signal);
       
-      // 3. If triggered, notify
       if (result.triggered) {
         logger.info({ signalId }, 'Signal triggered! Sending notification');
         
-        // Check cooldown
         const now = Date.now();
         const lastTriggered = signal.last_triggered_at ? new Date(signal.last_triggered_at).getTime() : 0;
         const cooldownMs = (signal.cooldown_minutes || 5) * 60000;
@@ -47,13 +41,12 @@ export const setupWorker = () => {
             signal_name: signal.name,
             triggered_at: new Date(result.timestamp).toISOString(),
             scope: signal.definition.chains,
-            conditions_met: [], // Todo: include details
+            conditions_met: [], 
             context: {}
           };
 
           const notifyResult = await dispatchNotification(signal.webhook_url, payload as any);
           
-          // 4. Log and Update last_triggered
           await pool.query(
             'UPDATE signals SET last_triggered_at = NOW() WHERE id = $1',
             [signalId]
@@ -68,7 +61,6 @@ export const setupWorker = () => {
         }
       }
 
-      // Update last_evaluated
       await pool.query('UPDATE signals SET last_evaluated_at = NOW() WHERE id = $1', [signalId]);
 
     } catch (error: any) {

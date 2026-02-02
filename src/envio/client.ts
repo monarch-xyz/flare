@@ -3,7 +3,8 @@ import { config } from '../config/index.js';
 import { EventRef, StateRef, Filter } from '../types/index.js';
 import pino from 'pino';
 
-const logger = pino();
+const pinoFactory = (pino as any).default || pino;
+const logger = pinoFactory();
 
 export class EnvioClient {
   private client: GraphQLClient;
@@ -15,9 +16,6 @@ export class EnvioClient {
     this.client = new GraphQLClient(endpoint);
   }
 
-  /**
-   * Translates generic filters to Hasura/GraphQL where clauses
-   */
   private translateFilters(filters: Filter[]): Record<string, any> {
     const where: Record<string, any> = {};
     for (const filter of filters) {
@@ -37,13 +35,8 @@ export class EnvioClient {
     return where;
   }
 
-  /**
-   * Fetch entity state at current or specific block (time-travel)
-   */
   async fetchState(ref: StateRef, blockNumber?: number): Promise<number> {
     const where = this.translateFilters(ref.filters);
-    
-    // Time-travel filter
     const blockFilter = blockNumber ? `(block: { number: ${blockNumber} })` : '';
     
     const query = `
@@ -64,13 +57,8 @@ export class EnvioClient {
     }
   }
 
-  /**
-   * Fetch aggregated events over time window
-   */
   async fetchEvents(ref: EventRef, startTimeMs: number, endTimeMs: number): Promise<number> {
     const where = this.translateFilters(ref.filters);
-    
-    // Add time window to filters
     const entityName = ref.event_type.startsWith('Morpho_') ? ref.event_type : `Morpho_${ref.event_type}`;
     
     where['timestamp'] = { _gte: Math.floor(startTimeMs / 1000), _lte: Math.floor(endTimeMs / 1000) };

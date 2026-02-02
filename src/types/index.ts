@@ -47,6 +47,10 @@ export interface Condition {
   right: ExpressionNode;
 }
 
+export interface SignalScope {
+  chains: number[];
+}
+
 export interface Signal {
   id: string;
   name: string;
@@ -59,4 +63,15 @@ export interface Signal {
   webhook_url: string;
   cooldown_minutes: number;
   is_active: boolean;
+  last_triggered_at?: string | Date;
+  last_evaluated_at?: string | Date;
+}
+
+export interface WebhookPayload {
+  signal_id: string;
+  signal_name: string;
+  triggered_at: string;
+  scope: number[];
+  conditions_met: any[];
+  context: any;
 }

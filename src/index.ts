@@ -1,10 +1,10 @@
 import express from 'express';
-import { config } from '../config/index.js';
+import { config } from './config/index.js';
 import signalRoutes from './api/routes/signals.js';
 import { initDb } from './db/index.js';
 import pino from 'pino';
 
-const logger = pino();
+const logger = (pino as any)() as pino.Logger;
 const app = express();
 
 app.use(express.json());
@@ -20,7 +20,6 @@ app.get('/health', (req, res) => {
 // Initialize and Start
 const start = async () => {
   try {
-    // Only init DB if not in test
     if (process.env.NODE_ENV !== 'test') {
       await initDb();
     }

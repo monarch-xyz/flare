@@ -3,15 +3,11 @@ import { pool } from '../db/index.js';
 import { signalQueue } from './processor.js';
 import pino from 'pino';
 
-const logger = pino();
+const logger = (pino as any)() as pino.Logger;
 
-/**
- * Scheduler Logic: Periodically scans DB and adds signals to the queue
- */
 export const startScheduler = () => {
   logger.info('Starting signal scheduler (30s interval)');
 
-  // Run every 30 seconds
   cron.schedule('*/30 * * * * *', async () => {
     logger.debug('Scheduler tick: Checking active signals');
     
