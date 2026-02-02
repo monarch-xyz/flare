@@ -19,8 +19,10 @@
     - [x] Signals, notification logs, snapshot blocks
     - [x] Evaluation cache table
     - [x] Repository classes with CRUD operations
-- [ ] **Signal CRUD API** (`src/api/routes/signals.ts`)
-    - [ ] Zod validation for complex DSL
+- [x] **Signal CRUD API** (`src/api/routes/signals.ts`)
+    - [x] Zod validation for complex DSL
+    - [x] PATCH /:id for partial updates
+    - [x] PATCH /:id/toggle for toggling is_active
 - [ ] **Simulation Engine**
     - [ ] Reuse `evaluateNode` with historical block overrides
 
