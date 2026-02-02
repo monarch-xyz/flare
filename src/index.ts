@@ -1,6 +1,7 @@
 import express from 'express';
 import { config } from './config/index.js';
 import signalRoutes from './api/routes/signals.js';
+import simulateRoutes from './api/routes/simulate.js';
 import { initDb } from './db/index.js';
 import pino from 'pino';
 
@@ -11,6 +12,7 @@ app.use(express.json());
 
 // API Routes
 app.use('/api/v1/signals', signalRoutes);
+app.use('/api/v1/signals', simulateRoutes);
 
 // Health Check
 app.get('/health', (req, res) => {
