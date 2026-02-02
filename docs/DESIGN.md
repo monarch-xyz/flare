@@ -1,50 +1,302 @@
-# 🎯 Monarch Signal Service - Design Doc
+# 🔥 Flare - Design Document
 
-> **Project:** Signal Service (codename: "Watchfire")
-> **Author:** Stark
+> **Project:** Flare — Composable Signal Monitoring for DeFi
+> **Author:** Stark + Anton
 > **Date:** 2026-02-02
-> **Status:** RFC / Design Discussion
+> **Status:** RFC v2 — Flexible DSL
 
 ---
 
 ## Executive Summary
 
-A monitoring service that lets users define complex, multi-condition signals on DeFi data and receive notifications when conditions are met. Built on our existing Envio indexer, designed for extensibility and performance.
+Flare is a **protocol-agnostic** monitoring service that lets users define complex conditions on blockchain data using composable primitives. Users can combine **events** and **state** with math expressions to create sophisticated signals.
 
-**Key Differentiators from TellTide:**
-- Uses Envio (GraphQL) instead of SQD — single unified data source
-- Supports complex multi-entity conditions (multiple addresses, markets)
-- Simulation/backtesting built-in
-- Cleaner separation of concerns
-- Designed for extensibility to other protocols
+**Key Design Principles:**
+1. **General, not opinionated** — No hardcoded protocol concepts (markets, vaults)
+2. **Composable** — Build complex metrics from simple primitives
+3. **Events + State** — Query both event streams and entity state
+4. **Time-aware** — Compare current values vs historical snapshots
 
 ---
 
 ## 1. Problem Statement
 
-Users want to track complex on-chain conditions like:
-- "3 of 5 whale addresses reduce their supply position by 10%+ each, AND total market TVL drops 20%, within 7 days"
-- "Any liquidation above $50k in markets I'm watching, aggregating value of 5% of total supply"
-- "Net borrow rate across my markets exceeds 15% APY for 1 hour"
+**Current monitoring tools are limited to:**
+- Single events with thresholds (\"alert if TVL < X\")
+- Simple state checks (\"alert if utilization > 90%\")
+- Protocol-specific, hardcoded metrics
 
-Current Product limitations:
-- Simple single-condition logic
-	- Either monitor single "state" or single "event" with threashold
-- No simulation/backtest capability
-- Tightly coupled architecture
+**Users want:**
+- \"3 of 5 addresses reduce position by 10%+ each over 7 days\"
+- \"Net supply flow (supply - withdraw) drops below 20% of starting position\"
+- \"Liquidation volume exceeds 5% of total market supply\"
+
+**Flare enables:**
+- Composable expressions from events + state
+- Generic filters (not hardcoded `market_id`, `address`)
+- Math operations to derive metrics
+- Time comparisons (`current` vs `window_start`)
 
 ---
 
-## 2. Architecture Overview
+## 2. Core Data Model
+
+### 2.1 Primitives
+
+The DSL is built from four primitives:
+
+| Primitive | Description | Example |
+|-----------|-------------|---------|
+| **EventRef** | Aggregate events over time window | `sum(Supply.assets)` |
+| **StateRef** | Read entity state at a point in time | `Position.supply_assets` |
+| **Expression** | Math operations on values | `EventA - EventB` |
+| **Condition** | Compare two expressions | `expr < threshold` |
+
+### 2.2 Filter (Generic)
+
+Replaces hardcoded fields like `market_id`, `address`:
+
+```typescript
+type FilterOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains';
+
+interface Filter {
+  field: string;      // Any field name from the event/entity
+  op: FilterOp;
+  value: string | number | boolean | string[];
+}
+```
+
+**Examples:**
+```json
+{\"field\": \"user\", \"op\": \"eq\", \"value\": \"0x123...\"}
+{\"field\": \"market_id\", \"op\": \"in\", \"value\": [\"0xabc\", \"0xdef\"]}\n{\"field\": \"assets\", \"op\": \"gte\", \"value\": 1000000}
+```
+
+### 2.3 EventRef
+
+Aggregate values from an event stream over the signal's time window:
+
+```typescript
+interface EventRef {
+  type: 'event';
+  event_type: string;       // e.g., \"Supply\", \"Withdraw\", \"Liquidate\"
+  filters: Filter[];        // Generic filters
+  field: string;            // Numeric field to extract
+  aggregation: 'sum' | 'count' | 'avg' | 'min' | 'max';
+}
+```
+
+**Example: Sum of supply assets for a user**
+```json
+{
+  \"type\": \"event\",
+  \"event_type\": \"Supply\",
+  \"filters\": [{\"field\": \"user\", \"op\": \"eq\", \"value\": \"0x123\"}],
+  \"field\": \"assets\",
+  \"aggregation\": \"sum\"
+}
+```
+
+### 2.4 StateRef
+
+Read a property from an entity at a specific time:
+
+```typescript
+interface StateRef {
+  type: 'state';
+  entity_type: string;      // e.g., \"Position\", \"Market\", \"Vault\"
+  filters: Filter[];        // Lookup filters (unique identifier)
+  field: string;            // Property to read
+  snapshot?: 'current' | 'window_start';  // Default: 'current'
+}
+```
+
+**Example: User's supply position at start of window**
+```json
+{
+  \"type\": \"state\",
+  \"entity_type\": \"Position\",
+  \"filters\": [
+    {\"field\": \"user\", \"op\": \"eq\", \"value\": \"0x123\"},
+    {\"field\": \"market_id\", \"op\": \"eq\", \"value\": \"0xabc\"}
+  ],
+  \"field\": \"supply_assets\",
+  \"snapshot\": \"window_start\"
+}
+```
+
+### 2.5 Expression (Composable Math)
+
+Combine values with math operations:
+
+```typescript
+type MathOp = 'add' | 'sub' | 'mul' | 'div';
+
+interface BinaryExpression {
+  type: 'expression';
+  operator: MathOp;
+  left: ExpressionNode;
+  right: ExpressionNode;
+}
+
+interface Constant {
+  type: 'constant';
+  value: number;
+}
+
+// Recursive union
+type ExpressionNode = EventRef | StateRef | BinaryExpression | Constant;
+```
+
+### 2.6 Condition
+
+Compare two expressions to determine if signal triggers:
+
+```typescript
+type ComparisonOp = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'neq';
+
+interface Condition {
+  type: 'condition';
+  left: ExpressionNode;
+  operator: ComparisonOp;
+  right: ExpressionNode;
+}
+
+---
+
+## 3. Envio Data Source & Aggregations
+
+Flare relies on Envio's GraphQL API (powered by Hasura). 
+
+### 3.1 Aggregate Query Naming
+In Envio, aggregate queries follow the pattern:
+- **Events:** `{EventName}_aggregate` (e.g., `Morpho_Supply_aggregate`)
+- **Entities:** `{EntityName}_aggregate` (e.g., `Position_aggregate`)
+
+The query structure looks like this:
+```graphql
+query GetSum {
+  Morpho_Supply_aggregate(where: { ... }) {
+    aggregate {
+      sum {
+        assets
+      }
+      count
+    }
+  }
+}
+```
+
+### 3.2 Enabling Aggregates
+**Important:** Envio disables runtime aggregates on their **hosted service** by default to prevent performance \"foot-guns.\" 
+
+- **Local/Self-Hosted:** Aggregates are enabled by default via Hasura.
+- **Hosted Envio:** We must maintain pre-calculated rollups or contact the Envio team to evaluate enabling specific runtime aggregates for our project. 
+
+For the Flare MVP, we assume aggregates are available (local/self-hosted) or use them strategically on indexed fields to minimize impact.
+
+---
+
+## 4. Signal Definition
+
+A complete signal combines:
+- **Scope**: Which chains to monitor
+- **Window**: Time frame for evaluation
+- **Condition**: When to trigger
+- **Delivery**: Where to send notifications
+
+```typescript
+interface Signal {
+  id?: string;
+  name: string;
+  description?: string;
+  
+  // Scope
+  chains: number[];           // [1, 8453] = Ethereum + Base
+  
+  // Time window
+  window: {
+    duration: string;         // \"1h\", \"7d\", \"30m\"
+  };
+  
+  // Trigger condition
+  condition: Condition;
+  
+  // Multiple conditions (optional)
+  conditions?: Condition[];
+  logic?: 'AND' | 'OR';       // Default: AND
+  
+  // Delivery
+  webhook_url: string;
+  cooldown_minutes?: number;  // Default: 5
+  
+  // State
+  is_active?: boolean;
+}
+```
+
+---
+
+## 5. Complete Examples
+
+### Example 1: Net Supply Drop Alert
+
+> \"Alert when net supply (supply - withdraw) drops below 20% of starting position\"
+
+```json
+{
+  \"name\": \"Net Supply Drop Alert\",
+  \"chains\": [1],
+  \"window\": {\"duration\": \"7d\"},
+  \"condition\": {
+    \"type\": \"condition\",
+    \"operator\": \"lt\",
+    \"left\": {
+      \"type\": \"expression\",
+      \"operator\": \"sub\",
+      \"left\": {
+        \"type\": \"event\",
+        \"event_type\": \"Supply\",
+        \"filters\": [{\"field\": \"user\", \"op\": \"eq\", \"value\": \"0x123\"}],
+        \"field\": \"assets\",
+        \"aggregation\": \"sum\"
+      },
+      \"right\": {
+        \"type\": \"event\",
+        \"event_type\": \"Withdraw\",\n        \"filters\": [{\"field\": \"user\", \"op\": \"eq\", \"value\": \"0x123\"}],
+        \"field\": \"assets\",
+        \"aggregation\": \"sum\"
+      }
+    },
+    \"right\": {
+      \"type\": \"expression\",
+      \"operator\": \"mul\",
+      \"left\": {\"type\": \"constant\", \"value\": 0.2},
+      \"right\": {
+        \"type\": \"state\",
+        \"entity_type\": \"Position\",
+        \"filters\": [{\"field\": \"user\", \"op\": \"eq\", \"value\": \"0x123\"}],
+        \"field\": \"supply_assets\",
+        \"snapshot\": \"window_start\"
+      }
+    }
+  },
+  \"webhook_url\": \"https://hooks.example.com/alert\"
+}
+```
+
+---
+
+## 6. Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     SIGNAL SERVICE                          │
+│                         FLARE                               │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
 │  │   REST API   │    │  EVALUATOR   │    │   WORKER     │  │
-│  │   (CRUD +    │    │  (Signal     │    │  (Scheduler  │  │
+│  │   (CRUD +    │    │  (Expression │    │  (Scheduler  │  │
 │  │   Simulate)  │    │   Engine)    │    │   + Notify)  │  │
 │  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘  │
 │         │                   │                   │           │
@@ -53,7 +305,7 @@ Current Product limitations:
 │                    ┌────────▼────────┐                      │
 │                    │  PostgreSQL     │                      │
 │                    │  (signals,      │                      │
-│                    │   state, logs)  │                      │
+│                    │   snapshots)    │                      │
 │                    └────────┬────────┘                      │
 │                             │                               │
 └─────────────────────────────┼───────────────────────────────┘
@@ -67,668 +319,10 @@ Current Product limitations:
 
 ---
 
-## 3. Data Model
-
-### 3.1 Signal Definition
-
-```typescript
-interface Signal {
-  id: string;                    // UUID
-  user_id: string;               // Owner
-  name: string;                  // Human-readable name
-  description?: string;          // Optional description
-  
-  // The signal definition
-  definition: SignalDefinition;
-  
-  // Delivery
-  webhook_url: string;
-  cooldown_minutes: number;      // Default: 5
-  
-  // State
-  is_active: boolean;
-  created_at: Date;
-  updated_at: Date;
-  last_triggered_at?: Date;
-  last_evaluated_at?: Date;
-}
-```
-
-### 3.2 Signal Definition (DSL)
-
-**Design Philosophy:** 
-- JSON-based for API consumption, easy to validate
-- Expression-based for complex conditions
-- Composable primitives
-
-```typescript
-interface SignalDefinition {
-  // Target scope
-  scope: SignalScope;
-  
-  // Conditions (AND by default)
-  conditions: Condition[];
-  
-  // How conditions combine
-  logic?: 'AND' | 'OR';          // Default: AND
-  
-  // Time window for evaluation
-  window: TimeWindow;
-}
-
-interface SignalScope {
-  chains: number[];              // [1, 8453] = Ethereum + Base
-  markets?: string[];            // Market IDs to watch
-  addresses?: string[];          // Addresses to track (optional)
-  protocol?: 'morpho' | 'all';   // Future: extensible
-}
-
-interface TimeWindow {
-  duration: string;              // "1h", "7d", "30m"
-  lookback_blocks?: number;      // Optional: override with blocks
-}
-```
-
-### 3.3 Conditions
-
-**Condition Types:**
-
-```typescript
-type Condition = 
-  | ThresholdCondition
-  | ChangeCondition
-  | GroupCondition
-  | AggregateCondition;
-
-// Simple threshold: "value > X"
-interface ThresholdCondition {
-  type: 'threshold';
-  metric: MetricType;
-  operator: '>' | '<' | '>=' | '<=' | '==' | '!=';
-  value: number;
-  
-  // Optional filters
-  market_id?: string;
-  address?: string;
-}
-
-// Change detection: "value changed by X%"
-interface ChangeCondition {
-  type: 'change';
-  metric: MetricType;
-  direction: 'increase' | 'decrease' | 'any';
-  by: { percent: number } | { absolute: number };
-  
-  // Optional filters
-  market_id?: string;
-  address?: string;
-}
-
-// Group condition: "N of M addresses meet condition"
-interface GroupCondition {
-  type: 'group';
-  addresses: string[];           // Watch these addresses
-  requirement: {
-    count: number;               // At least N
-    of: number;                  // of M total (validation)
-  };
-  condition: Condition;          // Each must meet this
-}
-
-// Aggregate across scope: "total/avg/sum across markets"
-interface AggregateCondition {
-  type: 'aggregate';
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count';
-  metric: MetricType;
-  operator: '>' | '<' | '>=' | '<=' | '==' | '!=';
-  value: number;
-}
-```
-
-### 3.4 Metrics
-
-```typescript
-type MetricType =
-  // Position metrics (per address per market)
-  | 'supply_assets'
-  | 'supply_shares'
-  | 'borrow_assets'
-  | 'borrow_shares'
-  | 'collateral_assets'
-  
-  // Market metrics (aggregate)
-  | 'market_total_supply'
-  | 'market_total_borrow'
-  | 'market_utilization'
-  | 'market_borrow_rate'
-  
-  // Event-based (flow)
-  | 'net_supply_flow'           // supply - withdraw
-  | 'net_borrow_flow'           // borrow - repay
-  | 'liquidation_volume'
-  | 'event_count';
-```
-
----
-
-## 4. Example Signals
-
-### Example 1: Whale Position Reduction
-*"3 of 5 whales reduce supply by 10%+ in market X over 7 days"*
-
-```json
-{
-  "name": "Whale Exodus Alert",
-  "definition": {
-    "scope": {
-      "chains": [1],
-      "markets": ["0x58e212..."]
-    },
-    "window": { "duration": "7d" },
-    "conditions": [
-      {
-        "type": "group",
-        "addresses": [
-          "0xwhale1...",
-          "0xwhale2...",
-          "0xwhale3...",
-          "0xwhale4...",
-          "0xwhale5..."
-        ],
-        "requirement": { "count": 3, "of": 5 },
-        "condition": {
-          "type": "change",
-          "metric": "supply_assets",
-          "direction": "decrease",
-          "by": { "percent": 10 }
-        }
-      }
-    ]
-  }
-}
-```
-
-### Example 2: Market TVL Drop + Utilization Spike
-*"Total supply drops 20% AND utilization exceeds 95%"*
-
-```json
-{
-  "name": "Liquidity Crisis Alert",
-  "definition": {
-    "scope": {
-      "chains": [1, 8453],
-      "markets": ["0xmarket1...", "0xmarket2..."]
-    },
-    "window": { "duration": "1h" },
-    "logic": "AND",
-    "conditions": [
-      {
-        "type": "change",
-        "metric": "market_total_supply",
-        "direction": "decrease",
-        "by": { "percent": 20 }
-      },
-      {
-        "type": "threshold",
-        "metric": "market_utilization",
-        "operator": ">",
-        "value": 0.95
-      }
-    ]
-  }
-}
-```
-
-### Example 3: Net Flow Alert
-*"Net withdrawals exceed $1M in any watched market"*
-
-```json
-{
-  "name": "Large Net Withdrawal",
-  "definition": {
-    "scope": {
-      "chains": [1],
-      "markets": ["0xmarket1...", "0xmarket2...", "0xmarket3..."]
-    },
-    "window": { "duration": "2h" },
-    "conditions": [
-      {
-        "type": "aggregate",
-        "aggregation": "sum",
-        "metric": "net_supply_flow",
-        "operator": "<",
-        "value": -1000000000000
-      }
-    ]
-  }
-}
-```
-
----
-
-## 5. Evaluation Engine
-
-### 5.1 Design Principles
-
-1. **Lazy evaluation** — Only query data needed for active signals
-2. **Caching** — Cache position snapshots, invalidate on new events
-3. **Batching** — Group signals by scope, share queries
-4. **Incremental** — Track state between evaluations
-
-### 5.2 Evaluation Flow
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    EVALUATION CYCLE                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. Load Active Signals                                     │
-│     ↓                                                       │
-│  2. Group by Scope (batch similar queries)                  │
-│     ↓                                                       │
-│  3. For each group:                                         │
-│     a. Fetch current state (Position, Market entities)      │
-│     b. Fetch event history if needed (flow metrics)         │
-│     c. Load previous snapshot (for change detection)        │
-│     ↓                                                       │
-│  4. Evaluate conditions:                                    │
-│     - Threshold: compare value to threshold                 │
-│     - Change: compare current vs snapshot                   │
-│     - Group: evaluate sub-condition per address             │
-│     - Aggregate: reduce values, compare                     │
-│     ↓                                                       │
-│  5. Combine conditions (AND/OR logic)                       │
-│     ↓                                                       │
-│  6. If triggered:                                           │
-│     a. Check cooldown                                       │
-│     b. Send webhook                                         │
-│     c. Log notification                                     │
-│     d. Update last_triggered_at                             │
-│     ↓                                                       │
-│  7. Save current snapshot for next cycle                    │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 5.3 Querying Envio
-
-```typescript
-// Example: Get positions for addresses in scope
-const POSITIONS_QUERY = gql`
-  query GetPositions($chainId: Int!, $marketId: String!, $users: [String!]!) {
-    Position(
-      where: {
-        chainId: { _eq: $chainId }
-        marketId: { _eq: $marketId }
-        user: { _in: $users }
-      }
-    ) {
-      user
-      supplyShares
-      borrowShares
-      collateral
-      market {
-        totalSupplyAssets
-        totalBorrowAssets
-        lastUpdate
-      }
-    }
-  }
-`;
-
-// Example: Get events for flow calculation
-const EVENTS_QUERY = gql`
-  query GetSupplyEvents($chainId: Int!, $marketId: String!, $since: BigInt!) {
-    Morpho_Supply(
-      where: {
-        chainId: { _eq: $chainId }
-        market_id: { _eq: $marketId }
-        timestamp: { _gte: $since }
-      }
-    ) {
-      onBehalf
-      assets
-      timestamp
-    }
-    Morpho_Withdraw(
-      where: {
-        chainId: { _eq: $chainId }
-        market_id: { _eq: $marketId }
-        timestamp: { _gte: $since }
-      }
-    ) {
-      onBehalf
-      assets
-      timestamp
-    }
-  }
-`;
-```
-
----
-
-## 6. API Design
-
-### 6.1 Endpoints
-
-```
-POST   /api/v1/signals              Create signal
-GET    /api/v1/signals              List signals (filter by user_id)
-GET    /api/v1/signals/:id          Get signal details
-PATCH  /api/v1/signals/:id          Update signal
-DELETE /api/v1/signals/:id          Delete signal
-
-POST   /api/v1/signals/:id/simulate Simulate signal on historical data
-GET    /api/v1/signals/:id/logs     Get trigger history
-
-GET    /api/v1/health               Health check
-GET    /api/v1/metrics              Prometheus metrics
-```
-
-### 6.2 Simulation Endpoint
-
-```typescript
-// POST /api/v1/signals/:id/simulate
-interface SimulateRequest {
-  start_time: string;            // ISO 8601
-  end_time: string;
-  // Optional: use definition from request body instead of saved signal
-  definition?: SignalDefinition;
-}
-
-interface SimulateResponse {
-  signal_id: string;
-  simulation_range: {
-    start: string;
-    end: string;
-  };
-  triggers: Array<{
-    timestamp: string;
-    conditions_met: string[];    // Which conditions triggered
-    values: Record<string, number>;
-  }>;
-  summary: {
-    total_triggers: number;
-    would_have_notified: number; // After cooldown
-  };
-}
-```
-
-### 6.3 Webhook Payload
-
-```json
-{
-  "signal_id": "uuid",
-  "signal_name": "Whale Exodus Alert",
-  "triggered_at": "2026-02-02T15:30:00Z",
-  "scope": {
-    "chains": [1],
-    "markets": ["0x58e212..."]
-  },
-  "conditions_met": [
-    {
-      "type": "group",
-      "description": "3 of 5 addresses reduced supply by 10%+",
-      "details": {
-        "addresses_triggered": ["0xwhale1", "0xwhale2", "0xwhale3"],
-        "changes": [
-          { "address": "0xwhale1", "change_percent": -15.2 },
-          { "address": "0xwhale2", "change_percent": -12.8 },
-          { "address": "0xwhale3", "change_percent": -10.1 }
-        ]
-      }
-    }
-  ],
-  "context": {
-    "market_total_supply": "50000000000000",
-    "market_utilization": 0.82
-  }
-}
-```
-
----
-
-## 7. Project Structure
-
-```
-signal-service/
-├── src/
-│   ├── api/                    # REST API
-│   │   ├── routes/
-│   │   │   ├── signals.ts
-│   │   │   ├── simulate.ts
-│   │   │   └── health.ts
-│   │   ├── middleware/
-│   │   │   ├── auth.ts
-│   │   │   └── validate.ts
-│   │   └── index.ts
-│   │
-│   ├── engine/                 # Signal evaluation
-│   │   ├── evaluator.ts        # Main evaluation logic
-│   │   ├── conditions/         # Condition implementations
-│   │   │   ├── threshold.ts
-│   │   │   ├── change.ts
-│   │   │   ├── group.ts
-│   │   │   └── aggregate.ts
-│   │   ├── metrics/            # Metric fetchers
-│   │   │   ├── position.ts
-│   │   │   ├── market.ts
-│   │   │   └── flow.ts
-│   │   └── cache.ts            # Snapshot caching
-│   │
-│   ├── worker/                 # Background processing
-│   │   ├── scheduler.ts        # Cron scheduling
-│   │   ├── evaluator-worker.ts
-│   │   └── notifier.ts         # Webhook dispatch
-│   │
-│   ├── db/                     # Database layer
-│   │   ├── schema.ts
-│   │   ├── repositories/
-│   │   │   ├── signals.ts
-│   │   │   ├── snapshots.ts
-│   │   │   └── notifications.ts
-│   │   └── migrations/
-│   │
-│   ├── envio/                  # Envio client
-│   │   ├── client.ts
-│   │   └── queries/
-│   │       ├── positions.ts
-│   │       ├── markets.ts
-│   │       └── events.ts
-│   │
-│   ├── types/                  # TypeScript types
-│   │   ├── signal.ts
-│   │   ├── condition.ts
-│   │   └── webhook.ts
-│   │
-│   └── config/
-│       └── index.ts
-│
-├── tests/
-│   ├── unit/
-│   │   ├── engine/
-│   │   └── api/
-│   ├── integration/
-│   └── fixtures/
-│
-├── docs/
-│   ├── API.md
-│   └── DSL.md
-│
-├── docker-compose.yml
-├── Dockerfile
-├── package.json
-└── tsconfig.json
-```
-
----
-
-## 8. Database Schema
-
-```sql
--- Signals table
-CREATE TABLE signals (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id VARCHAR(255) NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  definition JSONB NOT NULL,
-  webhook_url TEXT NOT NULL,
-  cooldown_minutes INT DEFAULT 5,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  last_triggered_at TIMESTAMPTZ,
-  last_evaluated_at TIMESTAMPTZ
-);
-
-CREATE INDEX idx_signals_user ON signals(user_id);
-CREATE INDEX idx_signals_active ON signals(is_active) WHERE is_active = true;
-
--- Snapshots (for change detection)
-CREATE TABLE signal_snapshots (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  signal_id UUID REFERENCES signals(id) ON DELETE CASCADE,
-  captured_at TIMESTAMPTZ NOT NULL,
-  data JSONB NOT NULL,  -- Captured state for comparison
-  UNIQUE(signal_id)     -- Only keep latest snapshot per signal
-);
-
--- Notification log
-CREATE TABLE notification_log (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  signal_id UUID REFERENCES signals(id) ON DELETE CASCADE,
-  triggered_at TIMESTAMPTZ NOT NULL,
-  payload JSONB NOT NULL,
-  webhook_status INT,
-  retry_count INT DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_notifications_signal ON notification_log(signal_id);
-CREATE INDEX idx_notifications_time ON notification_log(triggered_at DESC);
-```
-
----
-
-## Webhook Dispatcher & Abstraction
-
-**Everything is a webhook.** To support different channels (Telegram, Discord, etc.), Flare uses a "tunnel" approach:
-1. Flare evaluates a signal and triggers a generic HTTP POST webhook.
-2. For internal notifications (like our Telegram bot), we point Flare to an internal **Notification Tunnel** service.
-3. This keeps Flare lean—it doesn't care about Telegram APIs, just valid JSON over HTTP.
-
-```
-[Flare] ──▶ [Internal Tunnel] ──▶ [Telegram API]
-         └─▶ [Customer Webhook]
-```
-
-
-| Aspect | Envio | SQD |
-|--------|-------|-----|
-| **Integration** | Already have indexer | New indexer needed |
-| **Maintenance** | Single data source | Duplicate indexing |
-| **State Access** | Full Position/Market state | Events only |
-| **Query Style** | GraphQL (flexible) | Custom streaming |
-| **Consistency** | Same data as FE | Potentially different |
-
-**Decision:** Use Envio. Less complexity, single source of truth.
-
-### 9.2 Why JSON DSL over Expression Language?
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| **JSON DSL** | Type-safe, easy to validate, API-friendly | Verbose |
-| **Expression String** | Compact, powerful | Parsing complexity, security |
-| **Visual Builder** | User-friendly | FE complexity |
-
-**Decision:** Start with JSON DSL for API, add expression parser later for power users.
-
-### 9.3 Polling vs Event-Driven
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| **Polling** | Simple, predictable, rate-limited | Delay (30s-1m) |
-| **Event-Driven** | Real-time | Complex, higher load |
-
-**Decision:** Start with polling (30s interval). Real-time can be added later for premium users.
-
-### 9.4 Simulation Architecture
-
-**Option A:** Reuse live evaluator with historical data
-- Pros: Single code path
-- Cons: May need to mock time-dependent logic
-
-**Option B:** Separate simulation engine
-- Pros: Clean separation
-- Cons: Code duplication
-
-**Decision:** Option A — parameterize evaluator with time range, reuse condition logic.
-
----
-
-## 10. Implementation Phases
-
-### Phase 1: Core (Week 1-2)
-- [ ] Project scaffold + DB schema
-- [ ] Signal CRUD API
-- [ ] Basic condition types (threshold, change)
-- [ ] Single-market evaluation
-- [ ] Webhook dispatch
-- [ ] Unit tests
-
-### Phase 2: Complex Conditions (Week 3)
-- [ ] Group conditions (N of M)
-- [ ] Aggregate conditions
-- [ ] Multi-market scope
-- [ ] Flow metrics (net supply/borrow)
-
-### Phase 3: Simulation (Week 4)
-- [ ] Simulation endpoint
-- [ ] Historical data fetching
-- [ ] Backtest UI integration (basic)
-
-### Phase 4: Production Hardening (Week 5)
-- [ ] Rate limiting
-- [ ] Monitoring (Prometheus)
-- [ ] Error handling + retry
-- [ ] Documentation
-- [ ] Load testing
-
-### Future (Post-MVP)
-- [ ] Expression language parser
-- [ ] Real-time evaluation (WebSocket)
-- [ ] Multi-protocol support
-- [ ] Signal templates/sharing
-
----
-
-## 11. Open Questions
-
-1. **Authentication:** Use API keys (like data-api) or integrate with Monarch auth?
-   - Leaning: API keys for simplicity, Monarch auth for FE integration
-
-2. **Notification Channels:** Start with webhook only, or add Telegram/Discord?
-   - Leaning: Webhook first, add Telegram in Phase 2 (TellTide already has this)
-
-3. **Signal Limits:** How many signals per user?
-   - Suggestion: 10 free, more for paid users
-
-4. **Indexer Load:** Will high signal volume overload Envio?
-   - Mitigation: Query batching, caching, rate limiting
-
-5. **FE Integration:** Build in Monarch FE or separate dashboard?
-   - Suggestion: Separate first (like TellTide), integrate later
-
----
-
-## 12. Next Steps
+## 7. Next Steps
 
 1. **Discuss this design** — any concerns or changes needed?
-2. **Create repo** — `monarch-xyz/signal-service` or `monarch-xyz/watchfire`
-3. **Scaffold project** — follow structure above
-4. **Start Phase 1** — focus on core evaluation loop
+2. **Phase 1 Implementation** — complete core evaluation loop.
+3. **Phase 2 Implementation** — worker + delivery logic.
 
----
-
-*Let's discuss! 🚀*
+---\n\n*Last Updated: 2026-02-03 v2.1 (Added Envio Aggregates info)*
