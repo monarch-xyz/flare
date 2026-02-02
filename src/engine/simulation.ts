@@ -1,0 +1,166 @@
+import { Signal, ComparisonOp } from '../types/index.js';
+import { EvalContext, evaluateNode, evaluateCondition, parseDuration } from './evaluator.js';
+import { EnvioClient } from '../envio/client.js';
+import { resolveBlockByTimestamp } from '../envio/blocks.js';
+
+export interface SimulationRequest {
+  signal: Signal;           // The signal to simulate
+  atTimestamp: number;      // Unix timestamp (ms) to simulate at
+  chainId: number;          // Which chain to evaluate on
+}
+
+export interface SimulationResult {
+  triggered: boolean;       // Did condition evaluate to true?
+  leftValue: number;        // Evaluated left side of condition
+  rightValue: number;       // Evaluated right side of condition
+  operator: ComparisonOp;   // The comparison operator
+  evaluatedAt: number;      // The timestamp used for evaluation
+  windowStart: number;      // The calculated window start
+  blockNumbers: {
+    current: number;        // Block number for "current" state queries
+    windowStart: number;    // Block number for "window_start" state queries
+  };
+  executionTimeMs: number;  // How long evaluation took
+}
+
+/**
+ * Simulate a signal at a specific historical timestamp.
+ * 
+ * This allows testing and debugging signals by evaluating them
+ * as if we were at a specific point in time.
+ */
+export async function simulateSignal(req: SimulationRequest): Promise<SimulationResult> {
+  const startTime = Date.now();
+  
+  const { signal, atTimestamp, chainId } = req;
+  
+  // Calculate window timing
+  const windowDurationMs = parseDuration(signal.window.duration);
+  const windowStart = atTimestamp - windowDurationMs;
+  
+  // Resolve block numbers for both timestamps
+  const [currentBlock, windowStartBlock] = await Promise.all([
+    resolveBlockByTimestamp(chainId, atTimestamp),
+    resolveBlockByTimestamp(chainId, windowStart),
+  ]);
+  
+  // Create Envio client for data fetching
+  const envioClient = new EnvioClient();
+  
+  // Create the evaluation context with simulated timestamps
+  const context: EvalContext = {
+    chainId,
+    windowDuration: signal.window.duration,
+    now: atTimestamp,
+    windowStart,
+    
+    // Fetch state at a specific timestamp (or current if undefined)
+    fetchState: async (ref, timestamp?) => {
+      // If no timestamp specified, use the simulated "current" block
+      if (timestamp === undefined) {
+        return envioClient.fetchState(ref, currentBlock);
+      }
+      // Otherwise resolve the timestamp to a block
+      const blockNumber = await resolveBlockByTimestamp(chainId, timestamp);
+      return envioClient.fetchState(ref, blockNumber);
+    },
+    
+    // Fetch events in a time window
+    fetchEvents: async (ref, start, end) => {
+      return envioClient.fetchEvents(ref, start, end);
+    },
+  };
+  
+  // Evaluate both sides of the condition to get values
+  const [leftValue, rightValue] = await Promise.all([
+    evaluateNode(signal.condition.left, context),
+    evaluateNode(signal.condition.right, context),
+  ]);
+  
+  // Evaluate the full condition
+  const triggered = await evaluateCondition(
+    signal.condition.left,
+    signal.condition.operator,
+    signal.condition.right,
+    context
+  );
+  
+  const executionTimeMs = Date.now() - startTime;
+  
+  return {
+    triggered,
+    leftValue,
+    rightValue,
+    operator: signal.condition.operator,
+    evaluatedAt: atTimestamp,
+    windowStart,
+    blockNumbers: {
+      current: currentBlock,
+      windowStart: windowStartBlock,
+    },
+    executionTimeMs,
+  };
+}
+
+/**
+ * Simulate a signal at multiple timestamps to find when it would trigger.
+ * Useful for backtesting and debugging.
+ */
+export async function simulateSignalOverTime(
+  signal: Signal,
+  chainId: number,
+  startTimestamp: number,
+  endTimestamp: number,
+  stepMs: number = 3600000 // default 1 hour
+): Promise<SimulationResult[]> {
+  const results: SimulationResult[] = [];
+  
+  for (let ts = startTimestamp; ts <= endTimestamp; ts += stepMs) {
+    const result = await simulateSignal({ signal, atTimestamp: ts, chainId });
+    results.push(result);
+  }
+  
+  return results;
+}
+
+/**
+ * Find the first timestamp where a signal would have triggered.
+ * Uses binary search for efficiency.
+ */
+export async function findFirstTrigger(
+  signal: Signal,
+  chainId: number,
+  startTimestamp: number,
+  endTimestamp: number,
+  precisionMs: number = 60000 // default 1 minute
+): Promise<SimulationResult | null> {
+  // First check if end triggers - if not, no trigger in range
+  const endResult = await simulateSignal({ signal, atTimestamp: endTimestamp, chainId });
+  if (!endResult.triggered) {
+    return null;
+  }
+  
+  // Check if start triggers
+  const startResult = await simulateSignal({ signal, atTimestamp: startTimestamp, chainId });
+  if (startResult.triggered) {
+    return startResult;
+  }
+  
+  // Binary search for the transition point
+  let low = startTimestamp;
+  let high = endTimestamp;
+  
+  while (high - low > precisionMs) {
+    const mid = Math.floor((low + high) / 2);
+    const midResult = await simulateSignal({ signal, atTimestamp: mid, chainId });
+    
+    if (midResult.triggered) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+  
+  // Return the result at high (first triggered point)
+  return simulateSignal({ signal, atTimestamp: high, chainId });
+}
