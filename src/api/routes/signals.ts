@@ -1,6 +1,6 @@
 import express from 'express';
 import { SignalRepository } from '../../db/index.js';
-import { CreateSignalSchema } from '../validators.js';
+import { CreateSignalSchema, UpdateSignalSchema } from '../validators.js';
 import pino from 'pino';
 
 const logger = (pino as any)() as pino.Logger;
@@ -50,6 +50,36 @@ router.delete('/:id', async (req, res) => {
     const result = await repo.delete(req.params.id);
     res.json(result);
   } catch (error: any) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update Signal (partial)
+router.patch('/:id', async (req, res) => {
+  try {
+    const validated = UpdateSignalSchema.parse(req.body);
+    const signal = await repo.update(req.params.id, validated);
+    if (!signal) return res.status(404).json({ error: 'Signal not found' });
+    res.json(signal);
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ error: 'Validation failed', details: error.errors });
+    }
+    logger.error({ error: error.message }, 'Failed to update signal');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Toggle Signal Active Status
+router.patch('/:id/toggle', async (req, res) => {
+  try {
+    const existing = await repo.getById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Signal not found' });
+
+    const signal = await repo.update(req.params.id, { is_active: !existing.is_active });
+    res.json(signal);
+  } catch (error: any) {
+    logger.error({ error: error.message }, 'Failed to toggle signal');
     res.status(500).json({ error: 'Internal server error' });
   }
 });

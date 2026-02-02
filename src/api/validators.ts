@@ -71,3 +71,14 @@ export const CreateSignalSchema = z.object({
   webhook_url: z.string().url(),
   cooldown_minutes: z.number().int().min(0).default(5),
 });
+
+export const UpdateSignalSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  definition: SignalDefinitionSchema.optional(),
+  webhook_url: z.string().url().optional(),
+  cooldown_minutes: z.number().int().min(0).optional(),
+  is_active: z.boolean().optional(),
+}).refine(data => Object.keys(data).length > 0, {
+  message: 'At least one field must be provided for update',
+});
