@@ -3,21 +3,20 @@ import { pool } from '../db/index.js';
 import { SignalEvaluator } from '../engine/condition.js';
 import { EnvioClient } from '../envio/client.js';
 import { dispatchNotification } from './notifier.js';
-import { config } from '../config/index.js';
+import { connection } from './connection.js';
 import pino from 'pino';
-import IORedis from 'ioredis';
 
 const logger = (pino as any)() as pino.Logger;
 
-const connection = new (IORedis as any)(config.database.url.replace('postgresql', 'redis').split('?')[0] || 'redis://localhost:6379');
+export const QUEUE_NAME = 'signal-evaluation';
 
-export const signalQueue = new Queue('signal-evaluation', { connection });
+export const signalQueue = new Queue(QUEUE_NAME, { connection });
 
 export const setupWorker = () => {
   const envio = new EnvioClient();
   const evaluator = new SignalEvaluator(envio);
 
-  const worker = new Worker('signal-evaluation', async (job: Job) => {
+  const worker = new Worker(QUEUE_NAME, async (job: Job) => {
     const { signalId } = job.data;
     logger.info({ signalId }, 'Evaluating signal');
 

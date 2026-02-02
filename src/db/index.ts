@@ -20,6 +20,11 @@ export async function initDb() {
   }
 }
 
+export async function closeDb() {
+  await pool.end();
+  logger.info('Database connection closed');
+}
+
 // ============================================================================
 // SIGNAL REPOSITORY
 // ============================================================================

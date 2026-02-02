@@ -10,6 +10,11 @@ export const config = {
     url: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/flare',
   },
 
+  // Redis
+  redis: {
+    url: process.env.REDIS_URL ?? 'redis://localhost:6379',
+  },
+
   // API
   api: {
     port: parseInt(process.env.API_PORT ?? '3000', 10),
