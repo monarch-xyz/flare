@@ -1,4 +1,4 @@
-import { GraphQLClient, gql } from 'graphql-request';
+import { GraphQLClient } from 'graphql-request';
 import { config } from '../config/index.js';
 import { EventRef, StateRef, Filter } from '../types/index.js';
 import pino from 'pino';
@@ -46,7 +46,7 @@ export class EnvioClient {
     // Time-travel filter
     const blockFilter = blockNumber ? `(block: { number: ${blockNumber} })` : '';
     
-    const query = gql`
+    const query = `
       query GetState($where: ${ref.entity_type}_bool_exp!) {
         ${ref.entity_type}${blockFilter}(where: $where, limit: 1) {
           ${ref.field}
@@ -67,17 +67,15 @@ export class EnvioClient {
   /**
    * Fetch aggregated events over time window
    */
-  async fetchEvents(ref: EventRef, startTime: number, endTime: number): Promise<number> {
+  async fetchEvents(ref: EventRef, startTimeMs: number, endTimeMs: number): Promise<number> {
     const where = this.translateFilters(ref.filters);
     
     // Add time window to filters
-    // Note: mapping 'Supply' -> 'Morpho_Supply' based on our indexer schema
     const entityName = ref.event_type.startsWith('Morpho_') ? ref.event_type : `Morpho_${ref.event_type}`;
     
-    // We assume the indexer has a 'timestamp' field (standard Envio)
-    where['timestamp'] = { _gte: Math.floor(startTime / 1000), _lte: Math.floor(endTime / 1000) };
+    where['timestamp'] = { _gte: Math.floor(startTimeMs / 1000), _lte: Math.floor(endTimeMs / 1000) };
 
-    const query = gql`
+    const query = `
       query GetEvents($where: ${entityName}_bool_exp!) {
         ${entityName}_aggregate(where: $where) {
           aggregate {
