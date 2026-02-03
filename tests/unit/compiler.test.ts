@@ -144,6 +144,45 @@ describe('Compiler', () => {
       });
     });
 
+    it('includes event filters for event metrics', () => {
+      const userCondition: ThresholdCondition = {
+        type: 'threshold',
+        metric: 'Morpho.Event.Supply.assets',
+        operator: '>',
+        value: 100,
+        chain_id: 1,
+        filters: [
+          { field: 'caller', op: 'eq', value: '0xcaller' },
+          { field: 'isMonarch', op: 'eq', value: true },
+        ],
+      };
+
+      const result = compileCondition(userCondition) as InternalCondition;
+      expect(result.left).toMatchObject({
+        type: 'event',
+        event_type: 'Morpho_Supply',
+        filters: expect.arrayContaining([
+          { field: 'chainId', op: 'eq', value: 1 },
+          { field: 'caller', op: 'eq', value: '0xcaller' },
+          { field: 'isMonarch', op: 'eq', value: true },
+        ]),
+      });
+    });
+
+    it('rejects filters for non-event metrics', () => {
+      const userCondition: ThresholdCondition = {
+        type: 'threshold',
+        metric: 'Morpho.Market.totalBorrowAssets',
+        operator: '>',
+        value: 100,
+        chain_id: 1,
+        market_id: '0xmarket',
+        filters: [{ field: 'caller', op: 'eq', value: '0xcaller' }],
+      };
+
+      expect(() => compileCondition(userCondition)).toThrow('filters are only supported');
+    });
+
     it('maps all comparison operators correctly', () => {
       const operators: Array<{ input: '>' | '<' | '>=' | '<=' | '==' | '!='; expected: string }> = [
         { input: '>', expected: 'gt' },

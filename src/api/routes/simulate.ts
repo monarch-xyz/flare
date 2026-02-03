@@ -1,8 +1,7 @@
 import express from 'express';
 import { SignalRepository } from '../../db/index.js';
 import { normalizeStoredDefinition } from '../../engine/compile-signal.js';
-import { resolveBlockByTimestamp } from '../../envio/blocks.js';
-import { parseDuration } from '../../utils/duration.js';
+import { simulateSignalOverTime } from '../../engine/simulation.js';
 import { z } from 'zod';
 import { createLogger } from '../../utils/logger.js';
 
@@ -28,27 +27,44 @@ router.post('/:id/simulate', async (req, res) => {
 
     const startTs = new Date(start_time).getTime();
     const endTs = new Date(end_time).getTime();
-    const triggers = [];
+    const chainId = compiled.chains[0] || 1;
 
-    logger.info({ signalId: signal.id, start_time, end_time }, 'Starting simulation');
+    logger.info({ signalId: signal.id, start_time, end_time, interval_ms }, 'Starting simulation');
 
-    // Simulate in steps
-    for (let currentTs = startTs; currentTs <= endTs; currentTs += interval_ms) {
-      // Manual context override for simulation
-      const durationMs = parseDuration(compiled.window.duration);
-      const windowStart = currentTs - durationMs;
-      const chainId = compiled.chains[0] || 1;
-      const currentBlock = await resolveBlockByTimestamp(chainId, currentTs);
-      const windowStartBlock = await resolveBlockByTimestamp(chainId, windowStart);
+    const evalSignal = {
+      id: signal.id,
+      name: signal.name,
+      description: signal.description,
+      chains: compiled.chains,
+      window: compiled.window,
+      condition: compiled.condition,
+      conditions: compiled.conditions,
+      logic: compiled.logic,
+      webhook_url: signal.webhook_url,
+      cooldown_minutes: signal.cooldown_minutes,
+      is_active: signal.is_active,
+      last_triggered_at: signal.last_triggered_at,
+      last_evaluated_at: signal.last_evaluated_at,
+    };
 
-      // Note: This is a simplified simulation loop
-      // In a full impl, we'd pass a custom context to evaluator.evaluate()
-      // For now, we're building the endpoint structure
-      triggers.push({
-        timestamp: new Date(currentTs).toISOString(),
-        triggered: false, // Placeholder for actual hist evaluation
-      });
-    }
+    const results = await simulateSignalOverTime(
+      evalSignal,
+      chainId,
+      startTs,
+      endTs,
+      interval_ms
+    );
+
+    const triggers = results.map((result) => ({
+      timestamp: new Date(result.evaluatedAt).toISOString(),
+      triggered: result.triggered,
+      operator: result.operator,
+      left_value: result.leftValue,
+      right_value: result.rightValue,
+      window_start: new Date(result.windowStart).toISOString(),
+      block_numbers: result.blockNumbers,
+      execution_ms: result.executionTimeMs,
+    }));
 
     res.json({
       signal_id: signal.id,

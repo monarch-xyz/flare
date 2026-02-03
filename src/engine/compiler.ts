@@ -54,6 +54,7 @@ export interface CompiledAggregateCondition {
   chainId: number;
   marketIds?: string[];
   addresses?: string[];
+  filters?: Filter[];
 }
 
 /**
@@ -152,6 +153,29 @@ function validateRequiredFilters(
   // Event metrics: chain_id is enough (market_id/address are optional filters)
 }
 
+const RESERVED_EVENT_FILTER_FIELDS = new Set([
+  'chainId',
+  'marketId',
+  'market_id',
+  'user',
+  'onBehalf',
+  'timestamp',
+]);
+
+export function validateEventFilters(filters?: Filter[]): void {
+  if (!filters) return;
+  const seen = new Set<string>();
+  for (const filter of filters) {
+    if (RESERVED_EVENT_FILTER_FIELDS.has(filter.field)) {
+      throw new Error(`filters cannot target reserved field "${filter.field}"`);
+    }
+    if (seen.has(filter.field)) {
+      throw new Error(`filters cannot include duplicate field "${filter.field}"`);
+    }
+    seen.add(filter.field);
+  }
+}
+
 // ============================================
 // Helper Functions
 // ============================================
@@ -166,7 +190,12 @@ function constant(value: number): Constant {
  * For group conditions, address is NOT included in filters at compile time.
  * The group evaluator adds the user filter at evaluation time for each address.
  */
-function buildFilters(chainId: number, marketId?: string, address?: string): Filter[] {
+function buildFilters(
+  chainId: number,
+  marketId?: string,
+  address?: string,
+  extraFilters?: Filter[]
+): Filter[] {
   const filters: Filter[] = [];
 
   // Chain ID is always required
@@ -180,6 +209,10 @@ function buildFilters(chainId: number, marketId?: string, address?: string): Fil
     filters.push({ field: 'user', op: 'eq', value: address });
   }
   // For group conditions: NO user filter added here - group evaluator adds it at eval time
+
+  if (extraFilters && extraFilters.length > 0) {
+    filters.push(...extraFilters);
+  }
 
   return filters;
 }
@@ -210,7 +243,8 @@ function buildEventRef(
   metricName: string,
   chainId: number,
   marketId?: string,
-  address?: string
+  address?: string,
+  extraFilters?: Filter[]
 ): EventRef {
   const metric = resolveMetric(metricName);
 
@@ -221,7 +255,7 @@ function buildEventRef(
   return {
     type: 'event',
     event_type: metric.eventType,
-    filters: buildFilters(chainId, marketId, address),
+    filters: buildFilters(chainId, marketId, address, extraFilters),
     field: metric.field,
     aggregation: metric.aggregation,
   };
@@ -249,7 +283,8 @@ function buildChainedEventExpression(
   metricName: string,
   chainId: number,
   marketId?: string,
-  address?: string
+  address?: string,
+  extraFilters?: Filter[]
 ): BinaryExpression {
   const metric = getMetric(metricName);
 
@@ -258,8 +293,8 @@ function buildChainedEventExpression(
   }
 
   const [leftMetric, rightMetric] = metric.operands;
-  const leftEvent = buildEventRef(leftMetric, chainId, marketId, address);
-  const rightEvent = buildEventRef(rightMetric, chainId, marketId, address);
+  const leftEvent = buildEventRef(leftMetric, chainId, marketId, address, extraFilters);
+  const rightEvent = buildEventRef(rightMetric, chainId, marketId, address, extraFilters);
 
   return {
     type: 'expression',
@@ -310,13 +345,19 @@ export function buildMetricExpression(
   snapshot: 'current' | 'window_start' | string,
   chainId: number,
   marketId?: string,
-  address?: string
+  address?: string,
+  extraFilters?: Filter[]
 ): ExpressionNode {
+  if (extraFilters && extraFilters.length > 0 && !isEventMetric(metricName) && !isChainedEventMetric(metricName)) {
+    throw new Error('filters are only supported for event metrics');
+  }
   if (isChainedEventMetric(metricName)) {
-    return buildChainedEventExpression(metricName, chainId, marketId, address);
+    validateEventFilters(extraFilters);
+    return buildChainedEventExpression(metricName, chainId, marketId, address, extraFilters);
   }
   if (isEventMetric(metricName)) {
-    return buildEventRef(metricName, chainId, marketId, address);
+    validateEventFilters(extraFilters);
+    return buildEventRef(metricName, chainId, marketId, address, extraFilters);
   }
   if (isComputedMetric(metricName)) {
     return buildComputedExpression(metricName, snapshot, chainId, marketId, address);
@@ -342,15 +383,19 @@ type CompileOptions = {
 function compileThreshold(cond: ThresholdCondition, opts: CompileOptions = {}): InternalCondition {
   // Validate required filters (address validation skipped for group inner conditions)
   validateRequiredFilters(cond.metric, cond.chain_id, cond.market_id, cond.address, opts.isGroupInner);
+  if (cond.filters && !isEventMetric(cond.metric) && !isChainedEventMetric(cond.metric)) {
+    throw new Error('filters are only supported for event metrics');
+  }
+  validateEventFilters(cond.filters);
 
   let left: ExpressionNode;
 
   if (isChainedEventMetric(cond.metric)) {
     // Chained events: e.g., Morpho.Flow.netSupply = Supply - Withdraw
-    left = buildChainedEventExpression(cond.metric, cond.chain_id, cond.market_id, cond.address);
+    left = buildChainedEventExpression(cond.metric, cond.chain_id, cond.market_id, cond.address, cond.filters);
   } else if (isEventMetric(cond.metric)) {
     // Single event aggregation
-    left = buildEventRef(cond.metric, cond.chain_id, cond.market_id, cond.address);
+    left = buildEventRef(cond.metric, cond.chain_id, cond.market_id, cond.address, cond.filters);
   } else if (isComputedMetric(cond.metric)) {
     // Computed state metrics: e.g., Morpho.Market.utilization = borrow / supply
     left = buildComputedExpression(cond.metric, 'current', cond.chain_id, cond.market_id, cond.address);
@@ -540,6 +585,10 @@ function compileAggregate(cond: AggregateCondition): CompiledAggregateCondition 
   }
 
   resolveMetric(cond.metric);
+  if (cond.filters && !isEventMetric(cond.metric) && !isChainedEventMetric(cond.metric)) {
+    throw new Error('filters are only supported for event metrics');
+  }
+  validateEventFilters(cond.filters);
 
   return {
     type: 'aggregate',
@@ -549,6 +598,7 @@ function compileAggregate(cond: AggregateCondition): CompiledAggregateCondition 
     value: cond.value,
     chainId: cond.chain_id,
     marketIds: cond.market_id ? [cond.market_id] : undefined,
+    filters: cond.filters,
   };
 }
 

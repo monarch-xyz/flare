@@ -60,6 +60,8 @@ export interface ThresholdCondition {
   metric: MetricType;
   operator: ComparisonOperator;
   value: number;
+  /** Optional event-only filters (for event metrics) */
+  filters?: Array<{ field: string; op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains'; value: string | number | boolean | Array<string | number> }>;
   /** Chain ID (required) */
   chain_id: number;
   /** Market ID (required for Market/Position metrics) */
@@ -100,6 +102,8 @@ export interface AggregateCondition {
   metric: MetricType;
   operator: ComparisonOperator;
   value: number;
+  /** Optional event-only filters (for event metrics) */
+  filters?: Array<{ field: string; op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains'; value: string | number | boolean | Array<string | number> }>;
   /** Chain ID (required) */
   chain_id: number;
   /** Market ID (optional for aggregation) */

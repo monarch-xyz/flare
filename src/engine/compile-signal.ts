@@ -18,6 +18,7 @@ import {
 import {
   compileCondition,
   isSimpleCondition,
+  validateEventFilters,
   type CompiledAggregateCondition,
   type CompiledCondition,
 } from './compiler.js';
@@ -202,6 +203,10 @@ function compileAggregateWithScope(
   }
 
   const metricEntity = getMetricEntity(cond.metric);
+  if (cond.filters && metricEntity !== 'Event') {
+    throw new ValidationError('filters are only supported for event metrics', 'filters');
+  }
+  validateEventFilters(cond.filters);
   const marketIds = cond.market_id ? [cond.market_id] : scope.markets;
   const addresses = scope.addresses;
 
@@ -226,6 +231,7 @@ function compileAggregateWithScope(
     chainId,
     marketIds,
     addresses,
+    filters: cond.filters,
   };
 }
 

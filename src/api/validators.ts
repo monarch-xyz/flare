@@ -13,12 +13,23 @@ const TimeWindowSchema = z.object({
 });
 
 const ComparisonOperatorSchema = z.enum(['>', '<', '>=', '<=', '==', '!=']);
+const FilterSchema = z.object({
+  field: z.string(),
+  op: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'contains']),
+  value: z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(z.union([z.string(), z.number()])),
+  ]),
+});
 
 const ThresholdConditionSchema = z.object({
   type: z.literal('threshold'),
   metric: z.string(),
   operator: ComparisonOperatorSchema,
   value: z.number(),
+  filters: z.array(FilterSchema).optional(),
   chain_id: z.number().int().positive().optional(),
   market_id: z.string().optional(),
   address: z.string().optional(),
@@ -43,6 +54,7 @@ const AggregateConditionSchema = z.object({
   metric: z.string(),
   operator: ComparisonOperatorSchema,
   value: z.number(),
+  filters: z.array(FilterSchema).optional(),
   chain_id: z.number().int().positive().optional(),
   market_id: z.string().optional(),
 });

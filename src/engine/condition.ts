@@ -149,7 +149,8 @@ async function evaluateAggregateCondition(
       'current',
       cond.chainId,
       target.marketId,
-      target.address
+      target.address,
+      cond.filters
     );
     const value = await evaluateNode(expression, context);
     values.push(value);

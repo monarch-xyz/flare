@@ -18,7 +18,7 @@ REST API for managing signals and running simulations.
 | PATCH | `/signals/:id` | Update a signal |
 | PATCH | `/signals/:id/toggle` | Toggle `is_active` |
 | DELETE | `/signals/:id` | Delete a signal |
-| POST | `/simulate/:id/simulate` | Run simulation (stub, returns placeholders) |
+| POST | `/simulate/:id/simulate` | Run simulation |
 | GET | `/health` | Health check |
 
 ---
@@ -91,6 +91,31 @@ Common examples:
 - `Morpho.Event.Supply.assets`
 - `Morpho.Event.Supply.count` (event count metric)
 - `Morpho.Flow.netSupply` (chained event: Supply - Withdraw)
+
+**Event Filters (advanced)**
+
+You can add `filters` to event-based conditions (`threshold` or `aggregate`) to match specific event fields, for example `caller`, `isMonarch`, `txHash`.
+
+Rules:
+- Only supported for event metrics (including chained events like `Morpho.Flow.netSupply`).
+- Do not use reserved fields: `chainId`, `marketId`, `market_id`, `user`, `onBehalf`, `timestamp`.
+
+Example:
+
+```json
+{
+  "type": "threshold",
+  "metric": "Morpho.Event.Supply.assets",
+  "operator": ">",
+  "value": 1000,
+  "chain_id": 1,
+  "market_id": "0xM",
+  "filters": [
+    { "field": "caller", "op": "eq", "value": "0xC" },
+    { "field": "isMonarch", "op": "eq", "value": true }
+  ]
+}
+```
 
 ---
 
@@ -260,7 +285,7 @@ PATCH /api/v1/signals/:id/toggle
 
 ---
 
-**Simulation (Current Stub)**
+**Simulation**
 
 ```http
 POST /api/v1/simulate/:id/simulate
@@ -281,12 +306,21 @@ Content-Type: application/json
   "range": { "start_time": "2026-01-01T00:00:00Z", "end_time": "2026-02-01T00:00:00Z" },
   "steps": 25,
   "triggers": [
-    { "timestamp": "2026-01-01T00:00:00.000Z", "triggered": false }
+    {
+      "timestamp": "2026-01-01T00:00:00.000Z",
+      "triggered": false,
+      "operator": "gt",
+      "left_value": 120,
+      "right_value": 100,
+      "window_start": "2026-01-01T-01:00:00.000Z",
+      "block_numbers": { "current": 19000000, "windowStart": 18999900 },
+      "execution_ms": 42
+    }
   ]
 }
 ```
 
-Note: This endpoint currently returns placeholder `triggered: false` values and does not run real historical evaluation yet.
+Note: `left_value`/`right_value`/`operator` are only present when the signal has a single simple condition.
 
 ---
 

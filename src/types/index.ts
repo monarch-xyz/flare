@@ -3,7 +3,7 @@ export type FilterOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'cont
 export interface Filter {
   field: string;
   op: FilterOp;
-  value: string | number | boolean | string[];
+  value: string | number | boolean | Array<string | number>;
 }
 
 export interface EventRef {
