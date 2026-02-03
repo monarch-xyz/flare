@@ -11,6 +11,24 @@ interface ChainConfig {
 }
 
 /**
+ * Get RPC endpoints for a chain, checking env vars first
+ * Env var format: RPC_URL_{chainId} (e.g., RPC_URL_1 for Ethereum)
+ * Multiple URLs can be comma-separated
+ */
+function getRpcEndpoints(chainId: number, fallbackEndpoints: string[]): string[] {
+  const envVar = process.env[`RPC_URL_${chainId}`];
+  if (envVar) {
+    // Split by comma and trim whitespace
+    const customEndpoints = envVar.split(',').map(url => url.trim()).filter(Boolean);
+    if (customEndpoints.length > 0) {
+      // Custom endpoints take priority, fallbacks as backup
+      return [...customEndpoints, ...fallbackEndpoints];
+    }
+  }
+  return fallbackEndpoints;
+}
+
+/**
  * Known chain configurations
  */
 const CHAIN_CONFIGS: Record<number, ChainConfig> = {
@@ -118,9 +136,11 @@ async function rpcCall(
     throw new Error(`Unsupported chain: ${chainId}`);
   }
 
+  // Get endpoints with env var override support
+  const endpoints = getRpcEndpoints(chainId, config.rpcEndpoints);
   let lastError: Error | null = null;
 
-  for (const endpoint of config.rpcEndpoints) {
+  for (const endpoint of endpoints) {
     try {
       const response = await axios.post(
         endpoint,
