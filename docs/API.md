@@ -19,6 +19,7 @@ REST API for managing signals and running simulations.
 | PATCH | `/signals/:id/toggle` | Toggle `is_active` |
 | DELETE | `/signals/:id` | Delete a signal |
 | POST | `/simulate/:id/simulate` | Run simulation |
+| POST | `/simulate/:id/first-trigger` | Find first trigger in a range |
 | GET | `/health` | Health check |
 
 ---
@@ -294,7 +295,8 @@ Content-Type: application/json
 {
   "start_time": "2026-01-01T00:00:00Z",
   "end_time": "2026-02-01T00:00:00Z",
-  "interval_ms": 3600000
+  "interval_ms": 3600000,
+  "compact": false
 }
 ```
 
@@ -312,7 +314,7 @@ Content-Type: application/json
       "operator": "gt",
       "left_value": 120,
       "right_value": 100,
-      "window_start": "2026-01-01T-01:00:00.000Z",
+      "window_start": "2025-12-31T23:00:00.000Z",
       "block_numbers": { "current": 19000000, "windowStart": 18999900 },
       "execution_ms": 42
     }
@@ -321,6 +323,64 @@ Content-Type: application/json
 ```
 
 Note: `left_value`/`right_value`/`operator` are only present when the signal has a single simple condition.
+
+**Compact Response**
+
+Set `compact: true` to return only trigger timestamps:
+
+```json
+{
+  "signal_id": "550e8400-e29b-41d4-a716-446655440000",
+  "range": { "start_time": "2026-01-01T00:00:00Z", "end_time": "2026-02-01T00:00:00Z" },
+  "steps": 25,
+  "triggered_count": 2,
+  "triggered_timestamps": [
+    "2026-01-15T10:30:00.000Z",
+    "2026-01-22T14:00:00.000Z"
+  ]
+}
+```
+
+---
+
+**Find First Trigger**
+
+```http
+POST /api/v1/simulate/:id/first-trigger
+Content-Type: application/json
+
+{
+  "start_time": "2026-01-01T00:00:00Z",
+  "end_time": "2026-02-01T00:00:00Z",
+  "precision_ms": 60000
+}
+```
+
+**Response (not triggered)**
+
+```json
+{
+  "signal_id": "550e8400-e29b-41d4-a716-446655440000",
+  "triggered": false,
+  "range": { "start_time": "2026-01-01T00:00:00Z", "end_time": "2026-02-01T00:00:00Z" }
+}
+```
+
+**Response (triggered)**
+
+```json
+{
+  "signal_id": "550e8400-e29b-41d4-a716-446655440000",
+  "triggered": true,
+  "first_triggered_at": "2026-01-15T10:30:00.000Z",
+  "window_start": "2026-01-15T09:30:00.000Z",
+  "operator": "gt",
+  "left_value": 120,
+  "right_value": 100,
+  "block_numbers": { "current": 19000000, "windowStart": 18999900 },
+  "execution_ms": 42
+}
+```
 
 ---
 
