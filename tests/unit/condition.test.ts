@@ -225,7 +225,7 @@ describe('evaluateCondition', () => {
         type: 'state',
         entity_type: 'Position',
         filters: [{ field: 'user', op: 'eq', value: '0x123' }],
-        field: 'supply_assets',
+        field: 'supplyShares',
       };
       const right: ExpressionNode = { type: 'constant', value: 500 };
 
@@ -321,7 +321,7 @@ describe('SignalEvaluator', () => {
           type: 'state',
           entity_type: 'Position',
           filters: [{ field: 'user', op: 'eq', value: '0x123' }],
-          field: 'supply_assets',
+          field: 'supplyShares',
         },
         operator: 'gte',
         right: { type: 'constant', value: 1000 },
@@ -369,7 +369,7 @@ describe('SignalEvaluator', () => {
             type: 'state',
             entity_type: 'Position',
             filters: [{ field: 'user', op: 'eq', value: '0x123' }],
-            field: 'supply_assets',
+            field: 'supplyShares',
           },
           right: { type: 'constant', value: 0.1 },
         },
@@ -569,7 +569,7 @@ describe('evaluateNode additional tests', () => {
         type: 'state',
         entity_type: 'Position',
         filters: [],
-        field: 'supply_assets',
+        field: 'supplyShares',
         snapshot: 'current',
       };
 
@@ -587,7 +587,7 @@ describe('evaluateNode additional tests', () => {
         type: 'state',
         entity_type: 'Position',
         filters: [],
-        field: 'supply_assets',
+        field: 'supplyShares',
         snapshot: 'window_start',
       };
 

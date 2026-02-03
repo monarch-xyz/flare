@@ -80,9 +80,11 @@ This walkthrough shows how a user condition flows through each component.
 ```json
 {
   "type": "change",
-  "metric": "supply_assets",
+  "metric": "Morpho.Position.supplyShares",
   "direction": "decrease",
   "by": { "percent": 20 },
+  "chain_id": 1,
+  "market_id": "0x...",
   "address": "0xwhale..."
 }
 ```
@@ -130,7 +132,7 @@ const position = await morphoContract.read.position(
 );
 ```
 
-> ⚠️ **Note:** Envio does NOT support time-travel queries (`block: {number: X}`). Historical state requires RPC fallback.
+> ⚠️ **Note:** Envio does NOT support block-parameter time-travel (`block: {number: X}`). Point-in-time state reads use RPC.
 
 ### Step 5: Result
 ```json
@@ -148,8 +150,8 @@ const position = await morphoContract.read.position(
 
 ## 📌 Core Architecture
 
-### 1. Primary Data Source (Envio)
-Flare uses the existing **Envio Indexer** (GraphQL) for current state and events. This eliminates the need to maintain our own indexing stack and ensures data consistency with the Monarch ecosystem. For historical state, we fall back to RPC (see section 3).
+### 1. Complementary Data Sources (Envio + RPC)
+Flare uses the **Envio Indexer** (GraphQL) for indexed current state and events, and **RPC** for point-in-time state reads at specific blocks. They are complementary: Envio provides indexed views and event streams, RPC provides authoritative state snapshots.
 
 ### 2. Composable DSL
 We use a primitive-based tree DSL instead of hardcoded metrics.
@@ -157,16 +159,16 @@ We use a primitive-based tree DSL instead of hardcoded metrics.
 - **Benefit:** Decouples the backend from protocol-specific logic. Complex monitoring rules can be defined entirely via JSON without changing service code.
 
 ### 3. Hybrid Data Strategy (Envio + RPC)
-Flare uses a hybrid approach for historical state queries:
+Flare uses a hybrid approach with clear separation of responsibilities:
 
 | Query Type | Data Source | Why |
 |------------|-------------|-----|
-| Current state | Envio GraphQL | Fast, indexed, multi-chain |
-| Historical state | RPC `eth_call` | Envio doesn't support `block: {number: X}` |
-| Events | Envio GraphQL | Have timestamps, no time-travel needed |
+| Current state (latest) | Envio GraphQL | Fast, indexed, multi-chain |
+| Point-in-time state | RPC `eth_call` | Precise snapshot at block height |
+| Events (time range) | Envio GraphQL | Timestamped, indexed |
 | Block resolution | RPC | Binary search to find block for timestamp |
 
-> **Original design note:** We initially planned to use Envio's time-travel queries, but discovered they're not supported. See `docs/ISSUE_NO_TIME_TRAVEL.md` for details.
+> **Original design note:** We initially planned to use Envio's time-travel queries, but discovered they're not supported. This clarified the separation: Envio for indexed data and RPC for point-in-time state. See `docs/ISSUE_NO_TIME_TRAVEL.md`.
 
 ### 4. Job Queue Scaling
 Flare uses **BullMQ (Redis)** for job distribution from day one. This allows the service to scale horizontally and ensures that long-running evaluations do not block the event loop or other signals.

@@ -1,8 +1,8 @@
 /**
- * RPC Client for historical state queries
+ * RPC Client for point-in-time state queries
  *
  * Uses viem to read Morpho contract state at specific block numbers.
- * This is the fallback for historical state since Envio doesn't support time-travel.
+ * This is a complementary data source to the indexer (Envio), not a fallback.
  */
 
 import { createPublicClient, http, type PublicClient, type Chain, defineChain } from 'viem';

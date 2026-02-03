@@ -4,6 +4,9 @@
   "description": "Flexible Signal Monitoring Service for Monarch",
   "type": "module",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "concurrently \"pnpm api\" \"pnpm worker\"",
     "api": "tsx watch src/api/index.ts",

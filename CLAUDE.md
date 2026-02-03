@@ -16,7 +16,7 @@ Flare is a **signal monitoring service** for Monarch (DeFi dashboard for Morpho 
 
 | Layer | Technology |
 |-------|------------|
-| Runtime | Node.js 18+ / TypeScript |
+| Runtime | Node.js 22+ / TypeScript |
 | API | Express.js |
 | Database | PostgreSQL |
 | Data Source | Envio GraphQL (existing indexer) |
@@ -27,8 +27,8 @@ Flare is a **signal monitoring service** for Monarch (DeFi dashboard for Morpho 
 
 | File | Purpose |
 |------|---------|
-| `docs/DESIGN.md` | Full architecture & design decisions |
-| `docs/DSL.md` | Signal definition language reference |
+| `docs/ARCHITECTURE.md` | Full architecture & DSL reference |
+| `docs/DESIGN_DECISIONS.md` | Technical decisions |
 | `docs/API.md` | REST API documentation |
 | `docs/GETTING_STARTED.md` | Developer setup guide |
 
@@ -66,16 +66,19 @@ User-defined monitoring rule with:
 4. **Aggregate** — sum/avg across scope
 
 ### Metrics
-- Position: `supply_assets`, `borrow_assets`, `collateral_assets`
-- Market: `market_total_supply`, `market_utilization`
-- Flow: `net_supply_flow`, `liquidation_volume`
+- Position: `Morpho.Position.supplyShares`, `Morpho.Position.borrowShares`, `Morpho.Position.collateral`
+- Market: `Morpho.Market.totalSupplyAssets`, `Morpho.Market.utilization`
+- Flow: `Morpho.Flow.netSupply`, `Morpho.Flow.totalLiquidations`
 
 ## Data Sources
 
 **Envio Indexer** (`monarch-xyz/envio-indexer`):
 - GraphQL endpoint with Position, Market, Event entities
 - 7 chains: Ethereum, Base, Polygon, Arbitrum, Unichain, HyperEVM, Monad
-- Use for all blockchain data queries
+- Use for indexed current state and events
+
+**RPC (per chain):**
+- Point-in-time state reads (eth_call at block)
 
 **Envio Schema entities:**
 - `Position` — user positions per market

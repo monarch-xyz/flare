@@ -249,9 +249,9 @@ export class EnvioClient {
   }
 
   /**
-   * Fetch current state from Envio.
-   * Note: Envio does NOT support historical state queries.
-   * For historical state, use RPC via src/rpc/client.ts instead.
+   * Fetch current indexed state from Envio.
+   * Note: Envio does NOT support block-parameter time-travel.
+   * Point-in-time state reads use RPC via src/rpc/client.ts.
    */
   async fetchState(ref: StateRef): Promise<number> {
     const result = await this.batchQueries([{
@@ -278,7 +278,7 @@ export class EnvioClient {
 
   /**
    * Fetch raw positions without aggregation (current state only).
-   * Note: Envio does NOT support historical queries. Use RPC for historical state.
+   * Note: Envio does NOT support block-parameter time-travel. Use RPC for point-in-time state.
    */
   async fetchPositions(chainId: number, filters: Filter[]): Promise<Position[]> {
     const where = this.translateFilters(filters);
@@ -310,7 +310,7 @@ export class EnvioClient {
 
   /**
    * Fetch raw markets without aggregation (current state only).
-   * Note: Envio does NOT support historical queries. Use RPC for historical state.
+   * Note: Envio does NOT support block-parameter time-travel. Use RPC for point-in-time state.
    */
   async fetchMarkets(chainId: number, filters: Filter[] = []): Promise<Market[]> {
     const where = this.translateFilters(filters);

@@ -10,12 +10,12 @@ Two Envio limitations discovered:
 1. **No time-travel queries** - `block: {number: X}` not supported
 2. **No `_aggregate` in production** - must aggregate in-memory after fetching rows
 
-## Decision: Hybrid Data Strategy
+## Decision: Hybrid Data Strategy (Complementary Sources)
 
 | Data Type | Source | Method |
 |-----------|--------|--------|
-| **Current state** | Envio GraphQL | Query Position/Market entities |
-| **Historical state** | RPC `eth_call` | Read contract at past block |
+| **Current state (latest)** | Envio GraphQL | Query Position/Market entities |
+| **Point-in-time state** | RPC `eth_call` | Read contract at past block |
 | **Events (aggregated)** | Envio GraphQL | Fetch rows → in-memory aggregation |
 | **Block resolution** | RPC | Already implemented in `blocks.ts` |
 
@@ -24,11 +24,11 @@ Two Envio limitations discovered:
 - ✅ `ThresholdCondition` on current state (Envio)
 - ✅ `EventRef` aggregations (Envio events + in-memory sum/avg/count)
 - ✅ Block number resolution (RPC binary search)
-- ✅ `ChangeCondition` **with RPC fallback for historical state**
+- ✅ `ChangeCondition` **with RPC point-in-time state**
 
 ## What Needed Fixing
 
-### 1. State Time-Travel → RPC Fallback
+### 1. State Time-Travel → RPC Point-in-Time Reads
 
 The `EnvioClient.fetchState()` with `blockNumber` param doesn't work via Envio.
 
@@ -104,7 +104,7 @@ Even without time-travel and aggregation:
            ▼                 ▼                 ▼
     ┌────────────┐    ┌────────────┐    ┌────────────┐
     │   ENVIO    │    │  RPC NODES │    │  RPC NODES │
-    │  INDEXER   │    │  (archive) │    │  (latest)  │
+    │  INDEXER   │    │ (point-in-time) │    │ (latest)  │
     └────────────┘    └────────────┘    └────────────┘
 ```
 

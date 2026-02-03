@@ -10,29 +10,29 @@
     ],
     "positions": {
       "0xwhale1_alice_steady": {
-        "current": { "supply_assets": 10000000 },
-        "2d_ago": { "supply_assets": 10200000 },
-        "7d_ago": { "supply_assets": 10500000 }
+        "current": { "supplyShares": 10000000 },
+        "2d_ago": { "supplyShares": 10200000 },
+        "7d_ago": { "supplyShares": 10500000 }
       },
       "0xwhale2_bob_dumping": {
-        "current": { "supply_assets": 5000000 },
-        "2d_ago": { "supply_assets": 8000000 },
-        "7d_ago": { "supply_assets": 12000000 }
+        "current": { "supplyShares": 5000000 },
+        "2d_ago": { "supplyShares": 8000000 },
+        "7d_ago": { "supplyShares": 12000000 }
       },
       "0xwhale3_carol_accumulating": {
-        "current": { "supply_assets": 15000000 },
-        "2d_ago": { "supply_assets": 12000000 },
-        "7d_ago": { "supply_assets": 8000000 }
+        "current": { "supplyShares": 15000000 },
+        "2d_ago": { "supplyShares": 12000000 },
+        "7d_ago": { "supplyShares": 8000000 }
       },
       "0xwhale4_dave_volatile": {
-        "current": { "supply_assets": 7000000 },
-        "2d_ago": { "supply_assets": 5000000 },
-        "7d_ago": { "supply_assets": 10000000 }
+        "current": { "supplyShares": 7000000 },
+        "2d_ago": { "supplyShares": 5000000 },
+        "7d_ago": { "supplyShares": 10000000 }
       },
       "0xwhale5_eve_exiting": {
-        "current": { "supply_assets": 2000000 },
-        "2d_ago": { "supply_assets": 6000000 },
-        "7d_ago": { "supply_assets": 15000000 }
+        "current": { "supplyShares": 2000000 },
+        "2d_ago": { "supplyShares": 6000000 },
+        "7d_ago": { "supplyShares": 15000000 }
       }
     },
     "analysis": {
@@ -47,16 +47,16 @@
     "description": "Market-level data for supply/borrow stability tests",
     "id": "0xmarket_usdc_eth",
     "current": {
-      "total_supply_assets": 100000000,
-      "total_borrow_assets": 75000000
+      "totalSupplyAssets": 100000000,
+      "totalBorrowAssets": 75000000
     },
     "2d_ago": {
-      "total_supply_assets": 120000000,
-      "total_borrow_assets": 74000000
+      "totalSupplyAssets": 120000000,
+      "totalBorrowAssets": 74000000
     },
     "7d_ago": {
-      "total_supply_assets": 150000000,
-      "total_borrow_assets": 73000000
+      "totalSupplyAssets": 150000000,
+      "totalBorrowAssets": 73000000
     },
     "analysis": {
       "supply_change_2d": "-16.7% (dropping)",

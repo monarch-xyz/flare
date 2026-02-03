@@ -48,11 +48,11 @@ describe('Scenario 1: Multi-Timeframe Whale Position Tracking', () => {
       windowStart: NOW - SEVEN_DAYS_MS,
       fetchState: vi.fn(async (ref: StateRef, timestamp?: number) => {
         if (!timestamp || timestamp >= NOW - 1000) {
-          return positions.current.supply_assets;
+          return positions.current.supplyShares;
         } else if (timestamp >= NOW - TWO_DAYS_MS - 1000 && timestamp < NOW - 1000) {
-          return positions['2d_ago'].supply_assets;
+          return positions['2d_ago'].supplyShares;
         } else {
-          return positions['7d_ago'].supply_assets;
+          return positions['7d_ago'].supplyShares;
         }
       }),
       fetchEvents: vi.fn(async () => 0),
@@ -80,14 +80,14 @@ describe('Scenario 1: Multi-Timeframe Whale Position Tracking', () => {
           type: 'state',
           entity_type: 'Position',
           filters: [{ field: 'user', op: 'eq', value: address }],
-          field: 'supply_assets',
+          field: 'supplyShares',
           snapshot: 'current'
         } as StateRef,
         right: {
           type: 'state',
           entity_type: 'Position',
           filters: [{ field: 'user', op: 'eq', value: address }],
-          field: 'supply_assets',
+          field: 'supplyShares',
           snapshot: lookbackDuration
         } as StateRef
       },
@@ -223,14 +223,14 @@ describe('Scenario 2: Supply Drop but Borrow Stable (Market Risk Signal)', () =>
           type: 'state',
           entity_type: 'Market',
           filters: [{ field: 'id', op: 'eq', value: marketData.id }],
-          field: 'total_supply_assets',
+          field: 'totalSupplyAssets',
           snapshot: 'current'
         } as StateRef,
         right: {
           type: 'state',
           entity_type: 'Market',
           filters: [{ field: 'id', op: 'eq', value: marketData.id }],
-          field: 'total_supply_assets',
+          field: 'totalSupplyAssets',
           snapshot: '7d'
         } as StateRef
       },
@@ -246,14 +246,14 @@ describe('Scenario 2: Supply Drop but Borrow Stable (Market Risk Signal)', () =>
         type: 'state',
         entity_type: 'Market',
         filters: [{ field: 'id', op: 'eq', value: marketData.id }],
-        field: 'total_borrow_assets',
+          field: 'totalBorrowAssets',
         snapshot: 'current'
       } as StateRef,
       right: {
         type: 'state',
         entity_type: 'Market',
         filters: [{ field: 'id', op: 'eq', value: marketData.id }],
-        field: 'total_borrow_assets',
+          field: 'totalBorrowAssets',
         snapshot: '7d'
       } as StateRef
     };

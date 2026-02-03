@@ -1,6 +1,6 @@
 # 📋 Flare Implementation TODO
 
-## 🚨 URGENT: RPC State Fallback Migration (2026-02-03)
+## 🚨 URGENT: RPC Historical State Integration (2026-02-03)
 
 Envio does NOT support:
 1. Time-travel queries (`block: {number: X}`)
@@ -36,7 +36,7 @@ See: [docs/ISSUE_NO_TIME_TRAVEL.md](docs/ISSUE_NO_TIME_TRAVEL.md)
   - [x] Remove broken time-travel tests from envio.test.ts
   - [ ] Add RPC client unit tests
   - [ ] Mock RPC calls in evaluator tests
-  - [ ] Test ChangeCondition with RPC fallback
+- [ ] Test ChangeCondition with RPC historical state
   - [ ] Integration test: real RPC + Envio
 
 - [x] **5. Update documentation** ✅ (2026-02-03)
@@ -59,7 +59,7 @@ See: [docs/ISSUE_NO_TIME_TRAVEL.md](docs/ISSUE_NO_TIME_TRAVEL.md)
     - [x] ChangeCondition → current vs past expression
     - [x] GroupCondition → CompiledGroupCondition for N-of-M evaluation
     - [x] AggregateCondition → aggregated state comparison
-    - [x] Special handling for computed metrics (e.g., market_utilization)
+    - [x] Special handling for computed metrics (e.g., Morpho.Market.utilization)
 - [x] **Extensible Metric Registry** (`src/engine/metrics.ts`)
     - [x] Qualified names: `Morpho.Position.supplyShares`, `Morpho.Market.utilization`
     - [x] Legacy aliases for backwards compatibility

@@ -68,7 +68,7 @@ describe('SignalEvaluator Integration', () => {
             type: 'state',
             entity_type: 'Position',
             filters: [{ field: 'user', op: 'eq', value: '0x123' }],
-            field: 'supply_assets',
+            field: 'supplyShares',
             snapshot: 'window_start'
           }
         }

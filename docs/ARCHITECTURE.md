@@ -80,28 +80,24 @@ Recursively evaluates expression trees to produce boolean results.
 Extensible mapping of metric names to data sources.
 
 ```typescript
-// Qualified names (preferred)
+// Qualified names (required)
 "Morpho.Position.supplyShares"
 "Morpho.Market.totalBorrowAssets"
 "Morpho.Event.Supply.assets"
-
-// Legacy aliases (backwards compatible)
-"supply_assets" → Morpho.Position.supplyShares
-"market_utilization" → computed (borrow/supply)
 ```
 
 ### 4. EnvioClient (`src/envio/client.ts`)
 
-GraphQL client for fetching **current state** and **events** from Envio.
+GraphQL client for fetching **indexed current state** and **events** from Envio.
 
 - ⚠️ **Does NOT support time-travel** (no `block: {number: X}`)
 - ⚠️ **Does NOT support `_aggregate`** - we aggregate in-memory
 - Batch queries for efficiency
 - Throws `EnvioQueryError` on failures (no silent zeros)
 
-### 4b. RpcClient (`src/rpc/client.ts`) - TODO
+### 4b. RpcClient (`src/rpc/client.ts`)
 
-Direct RPC client for **historical state** queries.
+Direct RPC client for **point-in-time state** queries.
 
 - Uses `eth_call` with `blockNumber` parameter
 - Required for `ChangeCondition` (compares current vs past)
@@ -111,8 +107,8 @@ Direct RPC client for **historical state** queries.
 
 Orchestrates the full evaluation flow:
 1. Parse window duration
-2. Resolve block numbers for time-travel
-3. Build evaluation context
+2. Resolve block numbers for point-in-time snapshots (RPC)
+3. Build evaluation context (routes to Envio or RPC per snapshot)
 4. Call evaluator
 5. Return conclusive/inconclusive result
 
@@ -150,11 +146,11 @@ interface Condition {
 
 | Value | Meaning | Data Source |
 |-------|---------|-------------|
-| `"current"` | Latest block | Envio GraphQL |
+| `"current"` | Latest indexed state | Envio GraphQL |
 | `"window_start"` | Block at start of signal's window | **RPC eth_call** |
 | `"7d"`, `"2h"` | State N time ago | **RPC eth_call** |
 
-> ⚠️ **Note:** Envio does not support historical state queries. Any `snapshot` other than `"current"` requires RPC fallback.
+> ⚠️ **Note:** Envio does not support block-parameter time-travel. Point-in-time snapshots are resolved via RPC.
 
 ---
 
@@ -164,15 +160,15 @@ All metrics use qualified names: `{Protocol}.{Entity}.{field}`
 
 ### Data Source by Metric Type
 
-| Metric Type | Example | Current State | Historical State |
-|-------------|---------|---------------|------------------|
-| Position | `Morpho.Position.supplyShares` | Envio | **RPC** |
-| Market | `Morpho.Market.totalSupplyAssets` | Envio | **RPC** |
-| Event | `Morpho.Event.Supply.assets` | Envio | Envio (timestamp filter) |
-| Flow | `Morpho.Flow.netSupply` | Envio | Envio (timestamp filter) |
-| Computed | `Morpho.Market.utilization` | Envio | **RPC** |
+| Metric Type | Example | Indexed (Envio) | Point-in-Time (RPC) |
+|-------------|---------|------------------|---------------------|
+| Position | `Morpho.Position.supplyShares` | Latest state | **Block-specific** |
+| Market | `Morpho.Market.totalSupplyAssets` | Latest state | **Block-specific** |
+| Event | `Morpho.Event.Supply.assets` | Time-range events | N/A |
+| Flow | `Morpho.Flow.netSupply` | Time-range events | N/A |
+| Computed | `Morpho.Market.utilization` | Latest state | **Block-specific** |
 
-> **Key insight:** Events don't need time-travel because they have timestamps. State needs time-travel because it's a snapshot.
+> **Key insight:** Events are naturally time-bounded via timestamps. State needs point-in-time reads because it is a snapshot.
 
 ### State Metrics (Entity Properties)
 
@@ -212,6 +208,19 @@ Morpho.Flow.netSupply             # Supply - Withdraw
 Morpho.Flow.netBorrow             # Borrow - Repay
 Morpho.Flow.totalLiquidations     # repaidAssets + seizedAssets
 ```
+
+---
+
+## Event-Based Alerts
+
+Event metrics are first-class signals, not a workaround. They capture **activity** rather than **state**.
+
+Typical uses:
+- Sudden supply/withdraw spikes over a window
+- Liquidation bursts
+- Net flow reversals (e.g., net supply < 0 for 6h)
+
+Events are always evaluated over a time range (window) and are complementary to point-in-time state checks.
 
 ---
 
@@ -290,6 +299,99 @@ Aggregate values across scope.
 
 ---
 
+## Example Signals (Composed Conditions)
+
+All conditions in a signal share the same `window`. Use `logic: "AND"` or `"OR"` to combine them.
+
+### 1) Two Different State Checks (Market Stress)
+
+```json
+{
+  "scope": { "chains": [1], "markets": ["0x..."] },
+  "window": { "duration": "1h" },
+  "logic": "AND",
+  "conditions": [
+    {
+      "type": "threshold",
+      "metric": "Morpho.Market.utilization",
+      "operator": ">",
+      "value": 0.9,
+      "chain_id": 1,
+      "market_id": "0x..."
+    },
+    {
+      "type": "threshold",
+      "metric": "Morpho.Market.totalBorrowAssets",
+      "operator": ">",
+      "value": 50000000,
+      "chain_id": 1,
+      "market_id": "0x..."
+    }
+  ]
+}
+```
+
+### 2) State Change + State Change (Same Window)
+
+```json
+{
+  "scope": { "chains": [1], "markets": ["0x..."], "addresses": ["0xwhale..."] },
+  "window": { "duration": "7d" },
+  "logic": "AND",
+  "conditions": [
+    {
+      "type": "change",
+      "metric": "Morpho.Position.supplyShares",
+      "direction": "decrease",
+      "by": { "percent": 20 },
+      "chain_id": 1,
+      "market_id": "0x...",
+      "address": "0xwhale..."
+    },
+    {
+      "type": "change",
+      "metric": "Morpho.Market.totalSupplyAssets",
+      "direction": "decrease",
+      "by": { "percent": 15 },
+      "chain_id": 1,
+      "market_id": "0x..."
+    }
+  ]
+}
+```
+
+### 3) State Change + Event Aggregation (Flow Confirmation)
+
+```json
+{
+  "scope": { "chains": [1], "markets": ["0x..."], "addresses": ["0xwhale..."] },
+  "window": { "duration": "7d" },
+  "logic": "AND",
+  "conditions": [
+    {
+      "type": "change",
+      "metric": "Morpho.Position.supplyShares",
+      "direction": "decrease",
+      "by": { "percent": 15 },
+      "chain_id": 1,
+      "market_id": "0x...",
+      "address": "0xwhale..."
+    },
+    {
+      "type": "threshold",
+      "metric": "Morpho.Flow.netSupply",
+      "operator": "<",
+      "value": 0,
+      "chain_id": 1
+    }
+  ]
+}
+```
+
+**Note:** Per-condition windows (e.g., 2d vs 7d in the same signal) are not supported yet. If you need mixed timeframes, split into separate signals for now.
+
+---
+
 ## Evaluation Flow
 
 ```
@@ -303,14 +405,14 @@ Aggregate values across scope.
    ↓
 5. SignalEvaluator orchestrates:
    a. Parse window duration → windowStart timestamp
-   b. Resolve timestamps → block numbers (for RPC historical queries)
-   c. Build EvalContext with fetch functions
+   b. Resolve timestamps → block numbers (for RPC point-in-time queries)
+   c. Build EvalContext with fetch functions (Envio + RPC)
    d. Call evaluateCondition(left, op, right, context)
    ↓
 6. Evaluator recursively walks tree:
    - Constant → return value
-   - StateRef → EnvioClient.fetchState()
-   - EventRef → EnvioClient.fetchEvents()
+   - StateRef → fetchState() (Envio for current, RPC for point-in-time)
+   - EventRef → fetchEvents() (Envio indexer)
    - Expression → evaluate children, apply operator
    ↓
 7. Result: { triggered: boolean, conclusive: boolean }

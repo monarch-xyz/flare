@@ -52,7 +52,7 @@ Morpho.Event.Supply.assets      # Event aggregations
 
 ### Architecture
 ```
-User DSL → Compiler → Expression Tree → Evaluator → Envio/RPC → Result → Webhook
+User DSL → Compiler → Expression Tree → Evaluator → Envio (indexed) + RPC (point-in-time) → Result → Webhook
 ```
 
 ## Development
