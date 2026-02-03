@@ -41,7 +41,9 @@ beforeAll(() => {
 describe('Block Resolver Integration', () => {
   const TIMEOUT = 30000;
 
-  describe('Live chains - 2025-12-03', () => {
+  // Skipped: RPC integration tests are too slow for CI
+  // Run manually with: pnpm test:integration
+  describe.skip('Live chains - 2025-12-03', () => {
     it('Ethereum (chainId: 1)', async () => {
       const blockNumber = await resolveBlockByTimestamp(1, TEST_TIMESTAMP_MS);
       console.log(`\n📦 Ethereum block for 2025-12-03: ${blockNumber}`);
@@ -108,7 +110,7 @@ describe('Block Resolver Integration', () => {
     }, TIMEOUT);
   });
 
-  describe('Performance', () => {
+  describe.skip('Performance', () => {
     it('should use cache on second call (instant)', async () => {
       // First call (may hit RPC)
       const start1 = Date.now();

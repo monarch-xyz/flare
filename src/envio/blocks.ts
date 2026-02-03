@@ -273,8 +273,11 @@ function estimateBlockNumber(chainId: number, timestampSec: number): number {
 }
 
 /**
- * Binary search to find the block closest to the target timestamp
- * Returns the highest block number with timestamp <= target
+ * Binary search to find the first block with timestamp >= target.
+ * 
+ * NOTE: For fast chains with blocktime < 1s (e.g., Arbitrum at 0.25s),
+ * multiple blocks may share the same timestamp. This function returns
+ * ONE of those blocks, not necessarily the first or last.
  */
 async function binarySearchBlock(
   chainId: number,
@@ -306,49 +309,39 @@ async function binarySearchBlock(
     config.avgBlockTimeMs
   );
 
-  // Clamp estimate (should already be valid, but safety first)
-
   // Use estimate as starting point for binary search bounds
   const block = await getBlock(chainId, estimate);
 
-  if (block.timestamp === targetTimestampSec) {
-    return block.number;
-  }
-
-  if (block.timestamp < targetTimestampSec) {
-    low = block.number;
-  } else {
+  if (block.timestamp >= targetTimestampSec) {
     high = block.number;
+  } else {
+    low = block.number;
   }
 
-  // Binary search with max iterations to prevent infinite loops
+  // Binary search to find first block with timestamp >= target
   const maxIterations = 50;
   for (let i = 0; i < maxIterations; i++) {
     if (high - low <= 1) {
-      // Check if high is still valid
-      const highBlock = await getBlock(chainId, high);
-      if (highBlock.timestamp <= targetTimestampSec) {
-        return high;
+      // Check low first - if it satisfies, return it
+      const lowBlock = await getBlock(chainId, low);
+      if (lowBlock.timestamp >= targetTimestampSec) {
+        return low;
       }
-      return low;
+      return high;
     }
 
     const mid = Math.floor((low + high) / 2);
     const midBlock = await getBlock(chainId, mid);
 
-    if (midBlock.timestamp === targetTimestampSec) {
-      return mid;
-    }
-
-    if (midBlock.timestamp < targetTimestampSec) {
-      low = mid;
-    } else {
+    if (midBlock.timestamp >= targetTimestampSec) {
       high = mid;
+    } else {
+      low = mid;
     }
   }
 
-  // If we exhausted iterations, return low (safe choice)
-  return low;
+  // If we exhausted iterations, return high (first block >= target)
+  return high;
 }
 
 /**
