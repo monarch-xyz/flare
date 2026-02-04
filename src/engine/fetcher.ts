@@ -33,6 +33,13 @@ export type DataFetcher = {
 };
 
 /**
+ * Minimal interface for event-only fetchers (e.g., Envio client)
+ */
+export type EventFetcher = {
+  fetchEvents: (ref: EventRef, startTimeMs: number, endTimeMs: number) => Promise<number>;
+};
+
+/**
  * Options for creating a DataFetcher
  */
 export type DataFetcherOptions = {

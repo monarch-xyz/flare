@@ -1,19 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EvaluatableSignal } from "./condition.js";
-import {
-  SimulationRequest,
-  findFirstTrigger,
-  simulateSignal,
-  simulateSignalOverTime,
-} from "./simulation.js";
-
-// Mock the EnvioClient
-vi.mock("../envio/client.js", () => ({
-  EnvioClient: vi.fn().mockImplementation(() => ({
-    fetchState: vi.fn(),
-    fetchEvents: vi.fn(),
-  })),
-}));
+import { findFirstTrigger, simulateSignal, simulateSignalOverTime } from "./simulation.js";
 
 // Mock block resolution
 vi.mock("../envio/blocks.js", () => ({
@@ -28,19 +15,20 @@ vi.mock("../rpc/index.js", () => ({
 }));
 
 import { resolveBlockByTimestamp } from "../envio/blocks.js";
-import { EnvioClient } from "../envio/client.js";
 import { readMarketAtBlock } from "../rpc/index.js";
+import { createMorphoFetcher } from "./morpho-fetcher.js";
+import type { EventFetcher } from "./fetcher.js";
 
 // Type the mocked functions
 const mockedResolveBlockByTimestamp = vi.mocked(resolveBlockByTimestamp);
 const mockedReadMarketAtBlock = vi.mocked(readMarketAtBlock);
-const MockedEnvioClient = vi.mocked(EnvioClient);
 
 describe("simulation", () => {
-  const mockEnvioClient = {
-    fetchState: vi.fn(),
+  const mockEventFetcher: EventFetcher = {
     fetchEvents: vi.fn(),
   };
+
+  const createFetcher = (chainId: number) => createMorphoFetcher(mockEventFetcher, { chainId });
 
   const createMarketResult = (overrides: Record<string, bigint> = {}) => ({
     totalSupplyAssets: 0n,
@@ -54,7 +42,6 @@ describe("simulation", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    MockedEnvioClient.mockImplementation(() => mockEnvioClient as unknown as EnvioClient);
   });
 
   // Helper to create a test signal
@@ -89,6 +76,7 @@ describe("simulation", () => {
       const signal = createTestSignal();
       const atTimestamp = Date.now();
       const chainId = 1;
+      const fetcher = createFetcher(chainId);
 
       // Mock block resolution
       mockedResolveBlockByTimestamp
@@ -100,7 +88,7 @@ describe("simulation", () => {
         createMarketResult({ totalBorrowAssets: 2000000n }),
       );
 
-      const result = await simulateSignal({ signal, atTimestamp, chainId });
+      const result = await simulateSignal({ signal, atTimestamp, chainId, fetcher });
 
       expect(result.triggered).toBe(true);
       expect(result.leftValue).toBe(2000000);
@@ -116,6 +104,7 @@ describe("simulation", () => {
       const signal = createTestSignal();
       const atTimestamp = Date.now();
       const chainId = 1;
+      const fetcher = createFetcher(chainId);
 
       mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000)
@@ -124,7 +113,7 @@ describe("simulation", () => {
 
       mockedReadMarketAtBlock.mockResolvedValue(createMarketResult({ totalBorrowAssets: 500000n }));
 
-      const result = await simulateSignal({ signal, atTimestamp, chainId });
+      const result = await simulateSignal({ signal, atTimestamp, chainId, fetcher });
 
       expect(result.triggered).toBe(false);
       expect(result.leftValue).toBe(500000);
@@ -137,6 +126,7 @@ describe("simulation", () => {
       });
       const atTimestamp = 1704067200000; // 2024-01-01 00:00:00 UTC
       const chainId = 1;
+      const fetcher = createFetcher(chainId);
       const expectedWindowStart = atTimestamp - 7 * 24 * 60 * 60 * 1000;
 
       mockedResolveBlockByTimestamp
@@ -145,7 +135,7 @@ describe("simulation", () => {
         .mockResolvedValue(17900000);
       mockedReadMarketAtBlock.mockResolvedValue(createMarketResult({ totalBorrowAssets: 0n }));
 
-      const result = await simulateSignal({ signal, atTimestamp, chainId });
+      const result = await simulateSignal({ signal, atTimestamp, chainId, fetcher });
 
       expect(result.windowStart).toBe(expectedWindowStart);
       // Check that resolveBlockByTimestamp was called with correct timestamps
@@ -174,6 +164,7 @@ describe("simulation", () => {
 
       const atTimestamp = 1704067200000;
       const chainId = 1;
+      const fetcher = createFetcher(chainId);
 
       mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000) // current
@@ -184,7 +175,7 @@ describe("simulation", () => {
         createMarketResult({ totalBorrowAssets: 1500000n }),
       );
 
-      const result = await simulateSignal({ signal, atTimestamp, chainId });
+      const result = await simulateSignal({ signal, atTimestamp, chainId, fetcher });
 
       expect(result.triggered).toBe(true);
     });
@@ -210,19 +201,20 @@ describe("simulation", () => {
 
       const atTimestamp = 1704067200000;
       const chainId = 1;
+      const fetcher = createFetcher(chainId);
       const windowStart = atTimestamp - 24 * 60 * 60 * 1000; // 1 day
 
       mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000)
         .mockResolvedValueOnce(17990000)
         .mockResolvedValue(17990000);
-      mockEnvioClient.fetchEvents.mockResolvedValue(750000);
+      mockEventFetcher.fetchEvents.mockResolvedValue(750000);
 
-      const result = await simulateSignal({ signal, atTimestamp, chainId });
+      const result = await simulateSignal({ signal, atTimestamp, chainId, fetcher });
 
       expect(result.triggered).toBe(true);
       expect(result.leftValue).toBe(750000);
-      expect(mockEnvioClient.fetchEvents).toHaveBeenCalledWith(
+      expect(mockEventFetcher.fetchEvents).toHaveBeenCalledWith(
         expect.objectContaining({ type: "event", event_type: "Borrow" }),
         windowStart,
         atTimestamp,
@@ -259,6 +251,7 @@ describe("simulation", () => {
 
       const atTimestamp = Date.now();
       const chainId = 1;
+      const fetcher = createFetcher(chainId);
 
       mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000)
@@ -269,7 +262,7 @@ describe("simulation", () => {
         createMarketResult({ totalBorrowAssets: 950000n, totalSupplyAssets: 1000000n }),
       );
 
-      const result = await simulateSignal({ signal, atTimestamp, chainId });
+      const result = await simulateSignal({ signal, atTimestamp, chainId, fetcher });
 
       expect(result.triggered).toBe(true);
       expect(result.leftValue).toBe(0.95); // 950000 / 1000000
@@ -296,7 +289,7 @@ describe("simulation", () => {
 
       for (const { op, left, right, expected } of operators) {
         vi.clearAllMocks();
-        MockedEnvioClient.mockImplementation(() => mockEnvioClient as unknown as EnvioClient);
+        const fetcher = createFetcher(1);
 
         const signal = createTestSignal({
           condition: {
@@ -312,7 +305,12 @@ describe("simulation", () => {
           .mockResolvedValueOnce(17990000)
           .mockResolvedValue(17990000);
 
-        const result = await simulateSignal({ signal, atTimestamp: Date.now(), chainId: 1 });
+        const result = await simulateSignal({
+          signal,
+          atTimestamp: Date.now(),
+          chainId: 1,
+          fetcher,
+        });
 
         expect(result.triggered).toBe(expected);
         expect(result.operator).toBe(op);
@@ -336,8 +334,16 @@ describe("simulation", () => {
       const startTimestamp = 1704067200000;
       const endTimestamp = startTimestamp + 3 * 3600000; // 3 hours
       const stepMs = 3600000; // 1 hour
+      const fetcher = createFetcher(1);
 
-      const results = await simulateSignalOverTime(signal, 1, startTimestamp, endTimestamp, stepMs);
+      const results = await simulateSignalOverTime(
+        signal,
+        1,
+        startTimestamp,
+        endTimestamp,
+        stepMs,
+        fetcher,
+      );
 
       expect(results).toHaveLength(4); // 0, 1, 2, 3 hours
       expect(results[0].evaluatedAt).toBe(startTimestamp);
@@ -359,8 +365,9 @@ describe("simulation", () => {
       });
 
       mockedResolveBlockByTimestamp.mockResolvedValue(18000000);
+      const fetcher = createFetcher(1);
 
-      const result = await findFirstTrigger(signal, 1, 1704067200000, 1704153600000);
+      const result = await findFirstTrigger(signal, 1, 1704067200000, 1704153600000, 60000, fetcher);
 
       expect(result).toBeNull();
     });
@@ -376,9 +383,10 @@ describe("simulation", () => {
       });
 
       mockedResolveBlockByTimestamp.mockResolvedValue(18000000);
+      const fetcher = createFetcher(1);
 
       const startTimestamp = 1704067200000;
-      const result = await findFirstTrigger(signal, 1, startTimestamp, 1704153600000);
+      const result = await findFirstTrigger(signal, 1, startTimestamp, 1704153600000, 60000, fetcher);
 
       expect(result).not.toBeNull();
       expect(result?.evaluatedAt).toBe(startTimestamp);
@@ -394,6 +402,7 @@ describe("simulation", () => {
       const endTimestamp = 1704153600000;
 
       mockedResolveBlockByTimestamp.mockResolvedValue(18000000);
+      const fetcher = createFetcher(1);
 
       // Track simulation calls (each simulateSignal = 2 fetchState calls)
       let simulationIndex = 0;
@@ -411,7 +420,7 @@ describe("simulation", () => {
         return createMarketResult({ totalBorrowAssets: 2000000n }); // Binary search finds triggers
       });
 
-      const result = await findFirstTrigger(signal, 1, startTimestamp, endTimestamp, 60000);
+      const result = await findFirstTrigger(signal, 1, startTimestamp, endTimestamp, 60000, fetcher);
 
       // Should find a trigger point
       expect(result).not.toBeNull();

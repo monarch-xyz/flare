@@ -118,12 +118,13 @@ export async function simulateSignalOverTime(
   startTimestamp: number,
   endTimestamp: number,
   stepMs = 3600000, // default 1 hour
+  fetcher?: DataFetcher,
 ): Promise<SimulationResult[]> {
   const results: SimulationResult[] = [];
-  const fetcher = createMorphoFetcher(new EnvioClient(), { chainId });
+  const dataFetcher = fetcher ?? createMorphoFetcher(new EnvioClient(), { chainId });
 
   for (let ts = startTimestamp; ts <= endTimestamp; ts += stepMs) {
-    const result = await simulateSignal({ signal, atTimestamp: ts, chainId, fetcher });
+    const result = await simulateSignal({ signal, atTimestamp: ts, chainId, fetcher: dataFetcher });
     results.push(result);
   }
 
@@ -140,10 +141,16 @@ export async function findFirstTrigger(
   startTimestamp: number,
   endTimestamp: number,
   precisionMs = 60000, // default 1 minute
+  fetcher?: DataFetcher,
 ): Promise<SimulationResult | null> {
-  const fetcher = createMorphoFetcher(new EnvioClient(), { chainId });
+  const dataFetcher = fetcher ?? createMorphoFetcher(new EnvioClient(), { chainId });
   // First check if end triggers - if not, no trigger in range
-  const endResult = await simulateSignal({ signal, atTimestamp: endTimestamp, chainId, fetcher });
+  const endResult = await simulateSignal({
+    signal,
+    atTimestamp: endTimestamp,
+    chainId,
+    fetcher: dataFetcher,
+  });
   if (!endResult.triggered) {
     return null;
   }
@@ -153,7 +160,7 @@ export async function findFirstTrigger(
     signal,
     atTimestamp: startTimestamp,
     chainId,
-    fetcher,
+    fetcher: dataFetcher,
   });
   if (startResult.triggered) {
     return startResult;
@@ -165,7 +172,12 @@ export async function findFirstTrigger(
 
   while (high - low > precisionMs) {
     const mid = Math.floor((low + high) / 2);
-    const midResult = await simulateSignal({ signal, atTimestamp: mid, chainId, fetcher });
+    const midResult = await simulateSignal({
+      signal,
+      atTimestamp: mid,
+      chainId,
+      fetcher: dataFetcher,
+    });
 
     if (midResult.triggered) {
       high = mid;
@@ -175,5 +187,5 @@ export async function findFirstTrigger(
   }
 
   // Return the result at high (first triggered point)
-  return simulateSignal({ signal, atTimestamp: high, chainId, fetcher });
+  return simulateSignal({ signal, atTimestamp: high, chainId, fetcher: dataFetcher });
 }

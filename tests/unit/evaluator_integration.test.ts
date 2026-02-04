@@ -1,17 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SignalEvaluationResult, SignalEvaluator } from "../../src/engine/condition.js";
-import { EnvioClient } from "../../src/envio/client.js";
+import { SignalEvaluator } from "../../src/engine/condition.js";
+import type { DataFetcher } from "../../src/engine/fetcher.js";
 import type { Signal } from "../../src/types/index.js";
-
-// Mock EnvioClient
-vi.mock("../../src/envio/client.js", () => {
-  return {
-    EnvioClient: vi.fn().mockImplementation(() => ({
-      fetchState: vi.fn(),
-      fetchEvents: vi.fn(),
-    })),
-  };
-});
 
 // Mock block resolver to avoid real network calls
 vi.mock("../../src/envio/blocks.js", () => {
@@ -20,19 +10,16 @@ vi.mock("../../src/envio/blocks.js", () => {
   };
 });
 
-// Type for the mocked client
-interface MockEnvioClient {
-  fetchState: ReturnType<typeof vi.fn>;
-  fetchEvents: ReturnType<typeof vi.fn>;
-}
-
 describe("SignalEvaluator Integration", () => {
   let evaluator: SignalEvaluator;
-  let mockEnvio: MockEnvioClient;
+  let mockFetcher: DataFetcher;
 
   beforeEach(() => {
-    mockEnvio = new EnvioClient() as unknown as MockEnvioClient;
-    evaluator = new SignalEvaluator(mockEnvio as unknown as EnvioClient);
+    mockFetcher = {
+      fetchState: vi.fn(),
+      fetchEvents: vi.fn(),
+    };
+    evaluator = new SignalEvaluator(mockFetcher);
   });
 
   it("correctly evaluates a complex signal (net supply change)", async () => {
@@ -83,16 +70,16 @@ describe("SignalEvaluator Integration", () => {
 
     // Setup Mock Data
     // window_start position = 1000
-    mockEnvio.fetchState.mockResolvedValue(1000);
+    mockFetcher.fetchState.mockResolvedValue(1000);
     // Net supply = 150 (Supply 200 - Withdraw 50)
     // Condition: 150 < (0.2 * 1000) => 150 < 200 => TRUE
-    mockEnvio.fetchEvents
+    mockFetcher.fetchEvents
       .mockResolvedValueOnce(200) // Supply
       .mockResolvedValueOnce(50); // Withdraw
 
     const result = await evaluator.evaluate(signal);
     expect(result.triggered).toBe(true);
-    expect(mockEnvio.fetchState).toHaveBeenCalledWith(expect.anything(), expect.any(Number));
+    expect(mockFetcher.fetchState).toHaveBeenCalledWith(expect.anything(), expect.any(Number));
   });
 
   it("returns false when condition is not met", async () => {

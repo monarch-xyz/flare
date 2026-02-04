@@ -198,7 +198,7 @@ export interface WebhookPayload {
   signal_id: string;
   signal_name: string;
   triggered_at: string;
-  scope: SignalScope;
+  scope: number[];
   conditions_met: ConditionResult[];
   context: Record<string, unknown>;
 }

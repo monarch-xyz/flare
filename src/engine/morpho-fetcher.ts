@@ -7,7 +7,6 @@
  */
 
 import { resolveBlockByTimestamp } from "../envio/blocks.js";
-import type { EnvioClient } from "../envio/client.js";
 import {
   type MarketResult,
   type PositionResult,
@@ -18,7 +17,7 @@ import {
 } from "../rpc/index.js";
 import type { EventRef, StateRef } from "../types/index.js";
 import { createLogger } from "../utils/logger.js";
-import type { DataFetcher, DataFetcherOptions } from "./fetcher.js";
+import type { DataFetcher, DataFetcherOptions, EventFetcher } from "./fetcher.js";
 
 const logger = createLogger("morpho-fetcher");
 
@@ -80,10 +79,10 @@ function extractFilters(ref: StateRef): { chainId?: number; marketId?: string; u
 /**
  * Create a Morpho-specific DataFetcher
  *
- * @param envio - EnvioClient instance for events
+ * @param envio - Event fetcher instance for events
  * @param options - Fetcher options (chainId, verbose)
  */
-export function createMorphoFetcher(envio: EnvioClient, options: DataFetcherOptions): DataFetcher {
+export function createMorphoFetcher(envio: EventFetcher, options: DataFetcherOptions): DataFetcher {
   const { chainId: defaultChainId, verbose = false } = options;
 
   /**
