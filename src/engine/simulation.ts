@@ -5,11 +5,13 @@ import { isSimpleCondition, type CompiledCondition } from './compiler.js';
 import { EnvioClient } from '../envio/client.js';
 import { resolveBlockByTimestamp } from '../envio/blocks.js';
 import { createMorphoFetcher } from './morpho-fetcher.js';
+import type { DataFetcher } from './fetcher.js';
 
 export interface SimulationRequest {
   signal: Signal;           // The signal to simulate
   atTimestamp: number;      // Unix timestamp (ms) to simulate at
   chainId: number;          // Which chain to evaluate on
+  fetcher?: DataFetcher;    // Optional: reuse a fetcher across simulations
 }
 
 export interface SimulationResult {
@@ -35,7 +37,7 @@ export interface SimulationResult {
 export async function simulateSignal(req: SimulationRequest): Promise<SimulationResult> {
   const startTime = Date.now();
   
-  const { signal, atTimestamp, chainId } = req;
+  const { signal, atTimestamp, chainId, fetcher } = req;
   
   // Calculate window timing
   const windowDurationMs = parseDuration(signal.window.duration);
@@ -48,8 +50,7 @@ export async function simulateSignal(req: SimulationRequest): Promise<Simulation
   ]);
   
   // Create Envio client (for events) and morpho fetcher (for state)
-  const envioClient = new EnvioClient();
-  const fetcher = createMorphoFetcher(envioClient, { chainId });
+  const dataFetcher = fetcher ?? createMorphoFetcher(new EnvioClient(), { chainId });
 
   // Create the evaluation context with simulated timestamps
   const context: EvalContext = {
@@ -62,12 +63,12 @@ export async function simulateSignal(req: SimulationRequest): Promise<Simulation
     fetchState: async (ref, timestamp?) => {
       // For simulation, we treat "current" as the simulated timestamp
       const ts = timestamp ?? atTimestamp;
-      return fetcher.fetchState(ref, ts);
+      return dataFetcher.fetchState(ref, ts);
     },
 
     // Fetch events in a time window
     fetchEvents: async (ref, start, end) => {
-      return fetcher.fetchEvents(ref, start, end);
+      return dataFetcher.fetchEvents(ref, start, end);
     },
   };
   
@@ -118,9 +119,10 @@ export async function simulateSignalOverTime(
   stepMs: number = 3600000 // default 1 hour
 ): Promise<SimulationResult[]> {
   const results: SimulationResult[] = [];
+  const fetcher = createMorphoFetcher(new EnvioClient(), { chainId });
   
   for (let ts = startTimestamp; ts <= endTimestamp; ts += stepMs) {
-    const result = await simulateSignal({ signal, atTimestamp: ts, chainId });
+    const result = await simulateSignal({ signal, atTimestamp: ts, chainId, fetcher });
     results.push(result);
   }
   
@@ -138,14 +140,15 @@ export async function findFirstTrigger(
   endTimestamp: number,
   precisionMs: number = 60000 // default 1 minute
 ): Promise<SimulationResult | null> {
+  const fetcher = createMorphoFetcher(new EnvioClient(), { chainId });
   // First check if end triggers - if not, no trigger in range
-  const endResult = await simulateSignal({ signal, atTimestamp: endTimestamp, chainId });
+  const endResult = await simulateSignal({ signal, atTimestamp: endTimestamp, chainId, fetcher });
   if (!endResult.triggered) {
     return null;
   }
   
   // Check if start triggers
-  const startResult = await simulateSignal({ signal, atTimestamp: startTimestamp, chainId });
+  const startResult = await simulateSignal({ signal, atTimestamp: startTimestamp, chainId, fetcher });
   if (startResult.triggered) {
     return startResult;
   }
@@ -156,7 +159,7 @@ export async function findFirstTrigger(
   
   while (high - low > precisionMs) {
     const mid = Math.floor((low + high) / 2);
-    const midResult = await simulateSignal({ signal, atTimestamp: mid, chainId });
+    const midResult = await simulateSignal({ signal, atTimestamp: mid, chainId, fetcher });
     
     if (midResult.triggered) {
       high = mid;
@@ -166,5 +169,5 @@ export async function findFirstTrigger(
   }
   
   // Return the result at high (first triggered point)
-  return simulateSignal({ signal, atTimestamp: high, chainId });
+  return simulateSignal({ signal, atTimestamp: high, chainId, fetcher });
 }
