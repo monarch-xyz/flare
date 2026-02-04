@@ -3,6 +3,7 @@ import signalRoutes from "./api/routes/signals.js";
 import simulateRoutes from "./api/routes/simulate.js";
 import { config } from "./config/index.js";
 import { initDb } from "./db/index.js";
+import { getErrorMessage } from "./utils/errors.js";
 import { createLogger } from "./utils/logger.js";
 
 const logger = createLogger("api");
@@ -29,8 +30,8 @@ const start = async () => {
     app.listen(config.api.port, config.api.host, () => {
       logger.info(`Flare API running on http://${config.api.host}:${config.api.port}`);
     });
-  } catch (error: any) {
-    logger.error({ error: error.message }, "Failed to start server");
+  } catch (error: unknown) {
+    logger.error({ error: getErrorMessage(error) }, "Failed to start server");
     process.exit(1);
   }
 };

@@ -77,11 +77,20 @@ export interface Signal {
   last_evaluated_at?: string | Date;
 }
 
+/** Result of evaluating a single condition */
+export interface ConditionResult {
+  conditionIndex: number;
+  triggered: boolean;
+  operator?: string;
+  leftValue?: number;
+  rightValue?: number;
+}
+
 export interface WebhookPayload {
   signal_id: string;
   signal_name: string;
   triggered_at: string;
   scope: number[];
-  conditions_met: any[];
-  context: any;
+  conditions_met: ConditionResult[];
+  context: Record<string, unknown>;
 }

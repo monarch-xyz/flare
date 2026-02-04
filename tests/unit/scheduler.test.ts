@@ -3,7 +3,7 @@ import { pool } from "../../src/db/index.js";
 
 // Mock ioredis first (before bullmq)
 vi.mock("ioredis", () => ({
-  default: vi.fn().mockImplementation(() => ({
+  Redis: vi.fn().mockImplementation(() => ({
     quit: vi.fn().mockResolvedValue("OK"),
     disconnect: vi.fn(),
     on: vi.fn(),

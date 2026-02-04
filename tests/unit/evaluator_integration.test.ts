@@ -20,13 +20,19 @@ vi.mock("../../src/envio/blocks.js", () => {
   };
 });
 
+// Type for the mocked client
+interface MockEnvioClient {
+  fetchState: ReturnType<typeof vi.fn>;
+  fetchEvents: ReturnType<typeof vi.fn>;
+}
+
 describe("SignalEvaluator Integration", () => {
   let evaluator: SignalEvaluator;
-  let mockEnvio: any;
+  let mockEnvio: MockEnvioClient;
 
   beforeEach(() => {
-    mockEnvio = new EnvioClient();
-    evaluator = new SignalEvaluator(mockEnvio);
+    mockEnvio = new EnvioClient() as unknown as MockEnvioClient;
+    evaluator = new SignalEvaluator(mockEnvio as unknown as EnvioClient);
   });
 
   it("correctly evaluates a complex signal (net supply change)", async () => {

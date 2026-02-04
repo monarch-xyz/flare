@@ -6,6 +6,7 @@
 import { type Job, Queue, Worker } from "bullmq";
 import { config } from "../config/index.js";
 import { pool } from "../db/index.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
 import { connection } from "./connection.js";
 import { QUEUE_NAME as SIGNAL_QUEUE_NAME, signalQueue } from "./processor.js";
@@ -50,8 +51,8 @@ export const setupSchedulerWorker = () => {
         const count = await queueActiveSignals();
         logger.debug({ count }, "Added signals to queue");
         return { queued: count };
-      } catch (error: any) {
-        logger.error({ error: error.message }, "Scheduler failed to fetch signals");
+      } catch (error: unknown) {
+        logger.error({ error: getErrorMessage(error) }, "Scheduler failed to fetch signals");
         throw error;
       }
     },

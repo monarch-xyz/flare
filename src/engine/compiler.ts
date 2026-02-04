@@ -28,6 +28,8 @@ import type {
   Condition as UserCondition,
 } from "../types/signal.js";
 
+import { assertNever } from "../utils/errors.js";
+
 import {
   ChainedEventMetricDef,
   ComputedMetricDef,
@@ -673,7 +675,7 @@ export function compileCondition(
     case "aggregate":
       return compileAggregate(cond);
     default:
-      throw new Error(`Unknown condition type: ${(cond as any).type}`);
+      return assertNever(cond, "Unknown condition type");
   }
 }
 

@@ -11,6 +11,17 @@ import { EnvioClient } from "../envio/client.js";
 import type { EventRef } from "../types/index.js";
 import { parseDuration } from "../utils/duration.js";
 
+// GraphQL introspection types
+interface InputField {
+  name: string;
+}
+
+interface IntrospectionResponse {
+  __type?: {
+    inputFields?: InputField[];
+  };
+}
+
 async function main() {
   const addresses = (process.env.EVENT_ADDRESSES ?? "0xA,0xB,0xC")
     .split(",")
@@ -37,8 +48,8 @@ async function main() {
     const query =
       "\n      query IntrospectBoolExp($name: String!) {\n        __type(name: $name) {\n          inputFields { name }\n        }\n      }\n    ";
 
-    const result: any = await client.request(query, { name: boolExpType });
-    const fields: string[] = result?.__type?.inputFields?.map((f: any) => f.name) ?? [];
+    const result = await client.request<IntrospectionResponse>(query, { name: boolExpType });
+    const fields: string[] = result?.__type?.inputFields?.map((f) => f.name) ?? [];
 
     if (!marketField) {
       marketField = fields.includes("market_id")
@@ -74,7 +85,7 @@ async function main() {
     filters.push({
       field: userField,
       op: addresses.length === 1 ? "eq" : "in",
-      value: addresses.length === 1 ? addresses[0]! : addresses,
+      value: addresses.length === 1 ? (addresses[0] as string) : addresses,
     });
   }
 

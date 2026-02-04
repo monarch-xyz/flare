@@ -1,5 +1,6 @@
-import type { ComparisonOp, EventRef, ExpressionNode, StateRef } from "../types/index.js";
+import type { ComparisonOp, EventRef, ExpressionNode, MathOp, StateRef } from "../types/index.js";
 import { parseDuration } from "../utils/duration.js";
+import { assertNever } from "../utils/errors.js";
 
 // Re-export for backwards compatibility
 export { parseDuration } from "../utils/duration.js";
@@ -79,15 +80,11 @@ export async function evaluateNode(node: ExpressionNode, context: EvalContext): 
           }
           return left / right;
         default:
-          throw new EvaluationError(
-            `Unknown operator: ${(node as any).operator}`,
-            "INVALID_NODE",
-            node,
-          );
+          return assertNever(node.operator as never, "Unknown operator");
       }
     }
     default:
-      throw new EvaluationError(`Unknown node type: ${(node as any).type}`, "INVALID_NODE", node);
+      return assertNever(node, "Unknown node type");
   }
 }
 

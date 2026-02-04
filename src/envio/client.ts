@@ -1,7 +1,21 @@
 import { GraphQLClient } from "graphql-request";
 import { config } from "../config/index.js";
 import type { EventRef, Filter, StateRef } from "../types/index.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
+
+// ============================================
+// GraphQL Types
+// ============================================
+
+/** Generic GraphQL filter value */
+type GraphQLFilterValue = Record<string, unknown>;
+
+/** GraphQL response with dynamic aliases */
+type GraphQLResponse = Record<string, unknown[] | undefined>;
+
+/** Single entity row from GraphQL */
+type GraphQLRow = Record<string, unknown>;
 
 const logger = createLogger("envio-client");
 
@@ -100,8 +114,8 @@ export class EnvioClient {
   /**
    * Translate DSL filters to Hasura GraphQL filter syntax
    */
-  private translateFilters(filters: Filter[]): Record<string, any> {
-    const where: Record<string, any> = {};
+  private translateFilters(filters: Filter[]): GraphQLFilterValue {
+    const where: GraphQLFilterValue = {};
     for (const filter of filters) {
       const opMap: Record<string, string> = {
         eq: "_eq",
@@ -126,7 +140,7 @@ export class EnvioClient {
    */
   private buildStateQueryFragment(query: StateQuery): {
     fragment: string;
-    variables: Record<string, any>;
+    variables: Record<string, GraphQLFilterValue>;
   } {
     const where = this.translateFilters(query.ref.filters);
 
@@ -143,7 +157,7 @@ export class EnvioClient {
    */
   private buildEventQueryFragment(query: EventQuery): {
     fragment: string;
-    variables: Record<string, any>;
+    variables: Record<string, GraphQLFilterValue>;
   } {
     const where = this.translateFilters(this.remapEventFilters(query.ref.filters));
     const entityName = query.ref.event_type.startsWith("Morpho_")
@@ -202,7 +216,7 @@ export class EnvioClient {
     if (queries.length === 0) return {};
 
     const fragments: string[] = [];
-    let variables: Record<string, any> = {};
+    let variables: Record<string, GraphQLFilterValue> = {};
 
     for (const query of queries) {
       const built =
@@ -222,11 +236,11 @@ export class EnvioClient {
     `;
 
     try {
-      const data: any = await this.client.request(batchQuery, variables);
+      const data = (await this.client.request(batchQuery, variables)) as GraphQLResponse;
       const results: BatchResult = {};
 
       for (const query of queries) {
-        const rows = data[query.alias] || [];
+        const rows = (data[query.alias] || []) as GraphQLRow[];
 
         if (query.type === "state") {
           const entity = rows[0];
@@ -237,23 +251,21 @@ export class EnvioClient {
       }
 
       return results;
-    } catch (error: any) {
-      logger.error(
-        { error: error.message, queryCount: queries.length },
-        "Envio batch query failed",
-      );
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      logger.error({ error: message, queryCount: queries.length }, "Envio batch query failed");
       // Propagate error - do NOT silently return zeros
-      throw new EnvioQueryError(`Envio batch query failed: ${error.message}`, queries.length);
+      throw new EnvioQueryError(`Envio batch query failed: ${message}`, queries.length);
     }
   }
 
   /**
    * Perform in-memory aggregation on event rows
    */
-  private aggregateInMemory(rows: any[], ref: EventRef): number {
+  private aggregateInMemory(rows: GraphQLRow[], ref: EventRef): number {
     if (rows.length === 0) return 0;
 
-    const values = rows.map((r: any) => {
+    const values = rows.map((r) => {
       const val = r[ref.field];
       return val === undefined || val === null ? 0 : Number(val);
     });
@@ -330,10 +342,10 @@ export class EnvioClient {
     `;
 
     try {
-      const data: any = await this.client.request(query, { where });
+      const data = (await this.client.request(query, { where })) as { Position?: Position[] };
       return data.Position || [];
-    } catch (error: any) {
-      logger.error({ error: error.message, chainId }, "Envio positions fetch failed");
+    } catch (error: unknown) {
+      logger.error({ error: getErrorMessage(error), chainId }, "Envio positions fetch failed");
       return [];
     }
   }
@@ -367,10 +379,10 @@ export class EnvioClient {
     `;
 
     try {
-      const data: any = await this.client.request(query, { where });
+      const data = (await this.client.request(query, { where })) as { Market?: Market[] };
       return data.Market || [];
-    } catch (error: any) {
-      logger.error({ error: error.message, chainId }, "Envio markets fetch failed");
+    } catch (error: unknown) {
+      logger.error({ error: getErrorMessage(error), chainId }, "Envio markets fetch failed");
       return [];
     }
   }
@@ -407,10 +419,13 @@ export class EnvioClient {
     `;
 
     try {
-      const data: any = await this.client.request(query, { where });
+      const data = (await this.client.request(query, { where })) as Record<string, MorphoEvent[]>;
       return data[entityName] || [];
-    } catch (error: any) {
-      logger.error({ error: error.message, eventType, chainId }, "Envio raw events fetch failed");
+    } catch (error: unknown) {
+      logger.error(
+        { error: getErrorMessage(error), eventType, chainId },
+        "Envio raw events fetch failed",
+      );
       return [];
     }
   }

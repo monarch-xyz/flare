@@ -1,15 +1,16 @@
 import { createHmac } from "node:crypto";
 import axios from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WebhookPayload } from "../../src/types/index.js";
 
 vi.mock("axios");
 const mockedAxios = vi.mocked(axios, true);
 
-const payload = {
+const payload: WebhookPayload = {
   signal_id: "signal-1",
   signal_name: "Test Signal",
   triggered_at: "2025-01-01T00:00:00.000Z",
-  scope: { chains: [1] },
+  scope: [1],
   conditions_met: [],
   context: {},
 };
@@ -24,7 +25,8 @@ describe("Webhook signing", () => {
 
   afterEach(() => {
     if (originalSecret === undefined) {
-      process.env.WEBHOOK_SECRET = undefined;
+      // biome-ignore lint/performance/noDelete: delete is correct for env vars (undefined becomes "undefined" string)
+      delete process.env.WEBHOOK_SECRET;
     } else {
       process.env.WEBHOOK_SECRET = originalSecret;
     }
@@ -35,7 +37,7 @@ describe("Webhook signing", () => {
     vi.resetModules();
 
     const { dispatchNotification } = await import("../../src/worker/notifier.js");
-    await dispatchNotification("https://example.com/webhook", payload as any, 5000);
+    await dispatchNotification("https://example.com/webhook", payload, 5000);
 
     const options = mockedAxios.post.mock.calls[0][2];
     const payloadJson = JSON.stringify(payload);
@@ -47,11 +49,12 @@ describe("Webhook signing", () => {
   });
 
   it("skips signing when WEBHOOK_SECRET is empty", async () => {
-    process.env.WEBHOOK_SECRET = undefined;
+    // biome-ignore lint/performance/noDelete: delete is correct for env vars (undefined becomes "undefined" string)
+    delete process.env.WEBHOOK_SECRET;
     vi.resetModules();
 
     const { dispatchNotification } = await import("../../src/worker/notifier.js");
-    await dispatchNotification("https://example.com/webhook", payload as any, 5000);
+    await dispatchNotification("https://example.com/webhook", payload, 5000);
 
     const options = mockedAxios.post.mock.calls[0][2];
     expect(options.headers).not.toHaveProperty("X-Flare-Signature");

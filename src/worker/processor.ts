@@ -1,9 +1,11 @@
 import { type Job, Queue, Worker } from "bullmq";
 import { pool } from "../db/index.js";
 import { normalizeStoredDefinition } from "../engine/compile-signal.js";
-import { SignalEvaluator } from "../engine/condition.js";
+import { type EvaluatableSignal, SignalEvaluator } from "../engine/condition.js";
 import { createMorphoFetcher } from "../engine/morpho-fetcher.js";
 import { EnvioClient } from "../envio/client.js";
+import type { WebhookPayload } from "../types/index.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
 import { connection } from "./connection.js";
 import { dispatchNotification } from "./notifier.js";
@@ -35,7 +37,7 @@ export const setupWorker = () => {
         const rawDefinition =
           typeof signal.definition === "string" ? JSON.parse(signal.definition) : signal.definition;
         const storedDefinition = normalizeStoredDefinition(rawDefinition);
-        const evalSignal = {
+        const evalSignal: EvaluatableSignal = {
           id: signal.id,
           name: signal.name,
           description: signal.description,
@@ -52,7 +54,7 @@ export const setupWorker = () => {
         };
 
         const evalStart = Date.now();
-        const result = await evaluator.evaluate(evalSignal as any);
+        const result = await evaluator.evaluate(evalSignal);
         const evaluationDurationMs = Date.now() - evalStart;
 
         if (result.triggered) {
@@ -65,16 +67,16 @@ export const setupWorker = () => {
           const cooldownMs = (signal.cooldown_minutes || 5) * 60000;
 
           if (now - lastTriggered > cooldownMs) {
-            const payload = {
+            const payload: WebhookPayload = {
               signal_id: signal.id,
               signal_name: signal.name,
               triggered_at: new Date(result.timestamp).toISOString(),
-              scope: storedDefinition.dsl?.scope ?? { chains: storedDefinition.ast.chains },
+              scope: storedDefinition.ast.chains,
               conditions_met: [],
               context: {},
             };
 
-            const notifyResult = await dispatchNotification(signal.webhook_url, payload as any);
+            const notifyResult = await dispatchNotification(signal.webhook_url, payload);
 
             await pool.query("UPDATE signals SET last_triggered_at = NOW() WHERE id = $1", [
               signalId,
@@ -96,8 +98,8 @@ export const setupWorker = () => {
         }
 
         await pool.query("UPDATE signals SET last_evaluated_at = NOW() WHERE id = $1", [signalId]);
-      } catch (error: any) {
-        logger.error({ signalId, error: error.message }, "Worker evaluation failed");
+      } catch (error: unknown) {
+        logger.error({ signalId, error: getErrorMessage(error) }, "Worker evaluation failed");
         throw error;
       }
     },

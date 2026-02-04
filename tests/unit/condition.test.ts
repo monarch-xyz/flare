@@ -258,8 +258,14 @@ describe("evaluateCondition", () => {
   });
 });
 
+// Type for the mocked EnvioClient
+interface MockEnvioClient {
+  fetchState: ReturnType<typeof vi.fn>;
+  fetchEvents: ReturnType<typeof vi.fn>;
+}
+
 describe("SignalEvaluator", () => {
-  let mockEnvioClient: any;
+  let mockEnvioClient: MockEnvioClient;
 
   beforeEach(() => {
     vi.clearAllMocks();

@@ -6,6 +6,7 @@ import {
   EventQuery,
   StateQuery,
 } from "../../src/envio/client.js";
+import type { FilterOp } from "../../src/types/index.js";
 
 // Mock the GraphQL client
 const mockRequest = vi.fn();
@@ -606,7 +607,7 @@ describe("EnvioClient", () => {
       await client.fetchState({
         type: "state",
         entity_type: "Position",
-        filters: [{ field: "testField", op: op as any, value: "testValue" }],
+        filters: [{ field: "testField", op: op as FilterOp, value: "testValue" }],
         field: "any",
       });
 

@@ -4,7 +4,7 @@ import { dispatchNotification } from "../../src/worker/notifier.js";
 
 // Mock ioredis first (before bullmq)
 vi.mock("ioredis", () => ({
-  default: vi.fn().mockImplementation(() => ({
+  Redis: vi.fn().mockImplementation(() => ({
     quit: vi.fn().mockResolvedValue("OK"),
     disconnect: vi.fn(),
     on: vi.fn(),
@@ -34,17 +34,23 @@ vi.mock("../../src/worker/notifier.js", () => ({
   dispatchNotification: vi.fn().mockResolvedValue({ success: true, status: 200, durationMs: 100 }),
 }));
 
+// Type for BullMQ job handler
+type JobHandler = (job: { data: { signalId: string } }) => Promise<void>;
+
 // We mock BullMQ to capture the worker handler
-let capturedHandler: any;
+let capturedHandler: JobHandler | undefined;
 vi.mock("bullmq", () => ({
   Queue: vi.fn().mockImplementation(() => ({
     add: vi.fn(),
   })),
-  Worker: vi.fn().mockImplementation((name, handler) => {
+  Worker: vi.fn().mockImplementation((_name: string, handler: JobHandler) => {
     capturedHandler = handler;
     return { on: vi.fn(), close: vi.fn() };
   }),
 }));
+
+// Type the mocked pool
+const mockedPoolQuery = vi.mocked(pool.query);
 
 describe("Processor Logic", () => {
   beforeEach(() => {
@@ -56,7 +62,7 @@ describe("Processor Logic", () => {
     setupWorker();
 
     // 1. Mock DB returning a simple signal
-    (pool.query as any)
+    mockedPoolQuery
       .mockResolvedValueOnce({
         rows: [
           {
@@ -78,10 +84,15 @@ describe("Processor Logic", () => {
             },
           },
         ],
+        command: "SELECT",
+        rowCount: 1,
+        oid: 0,
+        fields: [],
       })
-      .mockResolvedValue({ rows: [] }); // For subsequent UPDATE queries
+      .mockResolvedValue({ rows: [], command: "UPDATE", rowCount: 0, oid: 0, fields: [] }); // For subsequent UPDATE queries
 
     // 2. Execute the worker handler
+    if (!capturedHandler) throw new Error("Handler not captured");
     await capturedHandler({ data: { signalId: "sig-123" } });
 
     // 3. Verify notification was sent (because evaluator returns triggered=true)

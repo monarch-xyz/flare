@@ -1,7 +1,8 @@
 import { createHmac } from "node:crypto";
-import axios from "axios";
+import axios, { isAxiosError } from "axios";
 import { config } from "../config/index.js";
 import type { WebhookPayload } from "../types/index.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
 
 const logger = createLogger("worker:notifier");
@@ -43,13 +44,14 @@ export async function dispatchNotification(
       status: response.status,
       durationMs: Date.now() - start,
     };
-  } catch (error: any) {
-    logger.error({ url, error: error.message }, "Webhook delivery failed");
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    logger.error({ url, error: message }, "Webhook delivery failed");
 
     return {
       success: false,
-      status: error.response?.status,
-      error: error.message,
+      status: isAxiosError(error) ? error.response?.status : undefined,
+      error: message,
       durationMs: Date.now() - start,
     };
   }

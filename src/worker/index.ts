@@ -7,6 +7,7 @@
  */
 
 import { closeDb, initDb } from "../db/index.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
 import { closeConnection } from "./connection.js";
 import { setupWorker } from "./processor.js";
@@ -45,8 +46,8 @@ const start = async () => {
 
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
-  } catch (error: any) {
-    logger.error({ error: error.message }, "Failed to start worker process");
+  } catch (error: unknown) {
+    logger.error({ error: getErrorMessage(error) }, "Failed to start worker process");
     process.exit(1);
   }
 };

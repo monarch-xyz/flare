@@ -31,6 +31,11 @@ import { resolveBlockByTimestamp } from "../envio/blocks.js";
 import { EnvioClient } from "../envio/client.js";
 import { readMarketAtBlock } from "../rpc/index.js";
 
+// Type the mocked functions
+const mockedResolveBlockByTimestamp = vi.mocked(resolveBlockByTimestamp);
+const mockedReadMarketAtBlock = vi.mocked(readMarketAtBlock);
+const MockedEnvioClient = vi.mocked(EnvioClient);
+
 describe("simulation", () => {
   const mockEnvioClient = {
     fetchState: vi.fn(),
@@ -49,7 +54,7 @@ describe("simulation", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (EnvioClient as any).mockImplementation(() => mockEnvioClient);
+    MockedEnvioClient.mockImplementation(() => mockEnvioClient as unknown as EnvioClient);
   });
 
   // Helper to create a test signal
@@ -86,12 +91,12 @@ describe("simulation", () => {
       const chainId = 1;
 
       // Mock block resolution
-      (resolveBlockByTimestamp as any)
+      mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000) // current block
         .mockResolvedValueOnce(17990000) // window start block
         .mockResolvedValue(17990000);
 
-      (readMarketAtBlock as any).mockResolvedValue(
+      mockedReadMarketAtBlock.mockResolvedValue(
         createMarketResult({ totalBorrowAssets: 2000000n }),
       );
 
@@ -112,14 +117,12 @@ describe("simulation", () => {
       const atTimestamp = Date.now();
       const chainId = 1;
 
-      (resolveBlockByTimestamp as any)
+      mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000)
         .mockResolvedValueOnce(17990000)
         .mockResolvedValue(17990000);
 
-      (readMarketAtBlock as any).mockResolvedValue(
-        createMarketResult({ totalBorrowAssets: 500000n }),
-      );
+      mockedReadMarketAtBlock.mockResolvedValue(createMarketResult({ totalBorrowAssets: 500000n }));
 
       const result = await simulateSignal({ signal, atTimestamp, chainId });
 
@@ -136,11 +139,11 @@ describe("simulation", () => {
       const chainId = 1;
       const expectedWindowStart = atTimestamp - 7 * 24 * 60 * 60 * 1000;
 
-      (resolveBlockByTimestamp as any)
+      mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000)
         .mockResolvedValueOnce(17900000)
         .mockResolvedValue(17900000);
-      (readMarketAtBlock as any).mockResolvedValue(createMarketResult({ totalBorrowAssets: 0n }));
+      mockedReadMarketAtBlock.mockResolvedValue(createMarketResult({ totalBorrowAssets: 0n }));
 
       const result = await simulateSignal({ signal, atTimestamp, chainId });
 
@@ -172,12 +175,12 @@ describe("simulation", () => {
       const atTimestamp = 1704067200000;
       const chainId = 1;
 
-      (resolveBlockByTimestamp as any)
+      mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000) // current
         .mockResolvedValueOnce(17990000) // window start (for context)
         .mockResolvedValueOnce(17990000) // window start (for state query)
         .mockResolvedValue(17990000);
-      (readMarketAtBlock as any).mockResolvedValue(
+      mockedReadMarketAtBlock.mockResolvedValue(
         createMarketResult({ totalBorrowAssets: 1500000n }),
       );
 
@@ -209,7 +212,7 @@ describe("simulation", () => {
       const chainId = 1;
       const windowStart = atTimestamp - 24 * 60 * 60 * 1000; // 1 day
 
-      (resolveBlockByTimestamp as any)
+      mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000)
         .mockResolvedValueOnce(17990000)
         .mockResolvedValue(17990000);
@@ -257,12 +260,12 @@ describe("simulation", () => {
       const atTimestamp = Date.now();
       const chainId = 1;
 
-      (resolveBlockByTimestamp as any)
+      mockedResolveBlockByTimestamp
         .mockResolvedValueOnce(18000000)
         .mockResolvedValueOnce(17990000)
         .mockResolvedValue(17990000);
 
-      (readMarketAtBlock as any).mockResolvedValue(
+      mockedReadMarketAtBlock.mockResolvedValue(
         createMarketResult({ totalBorrowAssets: 950000n, totalSupplyAssets: 1000000n }),
       );
 
@@ -293,7 +296,7 @@ describe("simulation", () => {
 
       for (const { op, left, right, expected } of operators) {
         vi.clearAllMocks();
-        (EnvioClient as any).mockImplementation(() => mockEnvioClient);
+        MockedEnvioClient.mockImplementation(() => mockEnvioClient as unknown as EnvioClient);
 
         const signal = createTestSignal({
           condition: {
@@ -304,7 +307,7 @@ describe("simulation", () => {
           },
         });
 
-        (resolveBlockByTimestamp as any)
+        mockedResolveBlockByTimestamp
           .mockResolvedValueOnce(18000000)
           .mockResolvedValueOnce(17990000)
           .mockResolvedValue(17990000);
@@ -328,7 +331,7 @@ describe("simulation", () => {
         },
       });
 
-      (resolveBlockByTimestamp as any).mockResolvedValue(18000000);
+      mockedResolveBlockByTimestamp.mockResolvedValue(18000000);
 
       const startTimestamp = 1704067200000;
       const endTimestamp = startTimestamp + 3 * 3600000; // 3 hours
@@ -355,7 +358,7 @@ describe("simulation", () => {
         },
       });
 
-      (resolveBlockByTimestamp as any).mockResolvedValue(18000000);
+      mockedResolveBlockByTimestamp.mockResolvedValue(18000000);
 
       const result = await findFirstTrigger(signal, 1, 1704067200000, 1704153600000);
 
@@ -372,7 +375,7 @@ describe("simulation", () => {
         },
       });
 
-      (resolveBlockByTimestamp as any).mockResolvedValue(18000000);
+      mockedResolveBlockByTimestamp.mockResolvedValue(18000000);
 
       const startTimestamp = 1704067200000;
       const result = await findFirstTrigger(signal, 1, startTimestamp, 1704153600000);
@@ -390,12 +393,12 @@ describe("simulation", () => {
       const startTimestamp = 1704067200000;
       const endTimestamp = 1704153600000;
 
-      (resolveBlockByTimestamp as any).mockResolvedValue(18000000);
+      mockedResolveBlockByTimestamp.mockResolvedValue(18000000);
 
       // Track simulation calls (each simulateSignal = 2 fetchState calls)
       let simulationIndex = 0;
 
-      (readMarketAtBlock as any).mockImplementation(async () => {
+      mockedReadMarketAtBlock.mockImplementation(async () => {
         // Each simulation increments twice, so divide by 2 to get simulation number
         const simNum = Math.floor(simulationIndex / 2);
         simulationIndex++;

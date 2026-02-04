@@ -33,3 +33,11 @@ export function getErrorMessage(error: unknown): string {
 export function isZodError(error: unknown): error is { name: "ZodError"; errors: unknown[] } {
   return isErrorWithMessage(error) && error.name === "ZodError";
 }
+
+/**
+ * Helper for exhaustive type checking in switch statements.
+ * TypeScript will error if the switch isn't exhaustive.
+ */
+export function assertNever(value: never, message?: string): never {
+  throw new Error(message ?? `Unexpected value: ${JSON.stringify(value)}`);
+}

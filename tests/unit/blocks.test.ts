@@ -15,6 +15,14 @@ import {
 vi.mock("axios");
 const mockedAxios = vi.mocked(axios, true);
 
+// Type for JSON-RPC request
+interface RpcRequest {
+  jsonrpc: string;
+  method: string;
+  params: [string, boolean];
+  id: number;
+}
+
 describe("Block Resolver", () => {
   beforeEach(() => {
     clearBlockCache();
@@ -111,7 +119,7 @@ describe("Block Resolver", () => {
       const targetBlock = 18500000;
 
       // Mock RPC calls for binary search
-      mockedAxios.post.mockImplementation(async (_url, data: any) => {
+      mockedAxios.post.mockImplementation(async (_url, data: RpcRequest) => {
         const params = data.params;
         if (params[0] === "latest") {
           return mockRpcResponse(19000000, 1706000000);
@@ -136,7 +144,7 @@ describe("Block Resolver", () => {
     it("returns cached result on second call", async () => {
       const targetTimestamp = 1700000000;
 
-      mockedAxios.post.mockImplementation(async (_url, data: any) => {
+      mockedAxios.post.mockImplementation(async (_url, data: RpcRequest) => {
         const params = data.params;
         if (params[0] === "latest") {
           return mockRpcResponse(19000000, 1706000000);
@@ -206,7 +214,7 @@ describe("Block Resolver", () => {
     it("tries multiple RPC endpoints on failure", async () => {
       let callCount = 0;
 
-      mockedAxios.post.mockImplementation(async (url: string, data: any) => {
+      mockedAxios.post.mockImplementation(async (url: string, data: RpcRequest) => {
         callCount++;
 
         // First two endpoints fail
@@ -235,7 +243,7 @@ describe("Block Resolver", () => {
       const exactTimestamp = 1700000000;
       const exactBlock = 18500000;
 
-      mockedAxios.post.mockImplementation(async (_url, data: any) => {
+      mockedAxios.post.mockImplementation(async (_url, data: RpcRequest) => {
         const params = data.params;
         if (params[0] === "latest") {
           return mockRpcResponse(19000000, 1706000000);
@@ -258,7 +266,7 @@ describe("Block Resolver", () => {
     it("works correctly for Base chain", async () => {
       const targetTimestamp = 1700000000;
 
-      mockedAxios.post.mockImplementation(async (url: string, data: any) => {
+      mockedAxios.post.mockImplementation(async (url: string, data: RpcRequest) => {
         // Verify Base endpoint is used
         expect(url).toMatch(/base/i);
 

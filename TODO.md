@@ -122,6 +122,16 @@ See: [docs/ISSUE_NO_TIME_TRAVEL.md](docs/ISSUE_NO_TIME_TRAVEL.md)
     - [x] Pino-based logger (`src/utils/logger.ts`)
     - [x] Request logger middleware with X-Request-Id (`src/api/middleware/requestLogger.ts`)
     - [x] LOG_LEVEL env var support (default: 'info')
+- [x] **TypeScript Strict Mode** (2026-02-04)
+    - [x] `noExplicitAny: "error"` in biome.json
+    - [x] Centralized error utilities (`src/utils/errors.ts`)
+        - [x] `getErrorMessage()` for type-safe error handling
+        - [x] `assertNever()` for exhaustive switch statements
+    - [x] Proper typing for GraphQL responses (`GraphQLFilterValue`, `GraphQLRow`, etc.)
+    - [x] Fixed all `catch (error: any)` blocks → `catch (error: unknown)`
+    - [x] Added `ConditionResult` and `WebhookPayload` types to `types/index.ts`
+    - [x] Properly typed vitest mocks (no more `as any` casts)
+    - [x] All tests pass with strict typing
 - [ ] **Monarch FE Integration**
 - [ ] **Prometheus Metrics** (evaluation times, success rates)
 - [ ] **Comprehensive Integration Tests**

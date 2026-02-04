@@ -9,6 +9,26 @@
 import "dotenv/config";
 import { GraphQLClient } from "graphql-request";
 
+// GraphQL Introspection types
+interface GraphQLTypeRef {
+  kind: string;
+  name: string | null;
+  ofType?: GraphQLTypeRef | null;
+}
+
+interface GraphQLField {
+  name: string;
+  type: GraphQLTypeRef;
+}
+
+interface IntrospectionResponse {
+  __type?: {
+    name: string;
+    inputFields?: GraphQLField[];
+    fields?: GraphQLField[];
+  };
+}
+
 const endpoint = process.env.ENVIO_ENDPOINT;
 if (!endpoint) {
   console.error("ENVIO_ENDPOINT is required");
@@ -66,7 +86,7 @@ const objectQuery = `
   }
 `;
 
-function flattenType(type: any): string {
+function flattenType(type: GraphQLTypeRef | null | undefined): string {
   if (!type) return "";
   if (type.kind === "NON_NULL") return `${flattenType(type.ofType)}!`;
   if (type.kind === "LIST") return `[${flattenType(type.ofType)}]`;
@@ -74,8 +94,8 @@ function flattenType(type: any): string {
 }
 
 async function main() {
-  const boolExp = await client.request<any>(boolExpQuery, { name: boolExpType });
-  const object = await client.request<any>(objectQuery, { name: eventType });
+  const boolExp = await client.request<IntrospectionResponse>(boolExpQuery, { name: boolExpType });
+  const object = await client.request<IntrospectionResponse>(objectQuery, { name: eventType });
 
   const boolFields = boolExp?.__type?.inputFields ?? [];
   const objectFields = object?.__type?.fields ?? [];
