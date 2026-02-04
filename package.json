@@ -20,6 +20,8 @@
     "test:integration": "vitest run tests/integration/",
     "test:condition": "tsx src/scripts/test-condition.ts",
     "db:migrate": "docker exec -i flare-postgres psql -U postgres -d flare < src/db/schema.sql",
+    "db:migrate:direct": "tsx src/scripts/migrate.ts",
+    "db:migrate:prod": "node dist/scripts/migrate.js",
     "db:reset": "docker exec -i flare-postgres psql -U postgres -d flare -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && pnpm db:migrate"
   },
   "dependencies": {

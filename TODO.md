@@ -143,6 +143,9 @@ See: [docs/ISSUE_NO_TIME_TRAVEL.md](docs/ISSUE_NO_TIME_TRAVEL.md)
     - [x] Field mapping for `market_id` + `onBehalf`
 - [x] **Simulation Guardrails** (2026-02-07)
     - [x] In-memory rate limiting for simulate endpoints
+- [x] **Deployment Readiness (Railway)** (2026-02-07)
+    - [x] Migration runner script (`src/scripts/migrate.ts`)
+    - [x] Deployment guide (`docs/DEPLOYMENT.md`)
 - [ ] **Monarch FE Integration**
 - [ ] **Prometheus Metrics** (evaluation times, success rates)
 - [ ] **Comprehensive Integration Tests**

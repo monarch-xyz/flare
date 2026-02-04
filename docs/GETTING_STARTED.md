@@ -24,6 +24,12 @@ pnpm db:migrate         # Run migrations
 pnpm dev                # Start API + Worker
 ```
 
+If you want to run migrations without Docker:
+
+```bash
+pnpm db:migrate:direct
+```
+
 ## Create an API Key (Local)
 
 ```bash

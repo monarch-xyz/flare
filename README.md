@@ -34,6 +34,7 @@ Flare enables sophisticated, multi-condition monitoring of blockchain data. User
 | [**GETTING_STARTED.md**](./docs/GETTING_STARTED.md) | Local setup |
 | [**DESIGN_DECISIONS.md**](./docs/DESIGN_DECISIONS.md) | Technical decisions |
 | [**ROADMAP.md**](./docs/ROADMAP.md) | Delivery plan |
+| [**DEPLOYMENT.md**](./docs/DEPLOYMENT.md) | Railway deploy guide |
 
 ## Key Concepts
 

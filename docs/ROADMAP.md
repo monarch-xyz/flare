@@ -6,6 +6,7 @@ This roadmap is MVP-focused and keeps migration costs low. Items are ordered by 
 - Finish RPC/Envio test coverage (unit + small integration)
 - Add smart query batching across signals (reduce Envio load)
 - Add basic operational metrics (latency + success rates)
+- Ship Railway deploy guide + migration runner
 
 ## Next (Productization)
 - Add tenant-level rate limiting with Redis (shared across instances)
