@@ -8,6 +8,7 @@ import { initDb, closeDb } from '../db/index.js';
 import signalsRouter from './routes/signals.js';
 import simulateRouter from './routes/simulate.js';
 import { createLogger } from '../utils/logger.js';
+import { authMiddleware } from './middleware/auth.js';
 
 const logger = createLogger('api');
 const app = express();
@@ -21,6 +22,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/v1', authMiddleware);
 app.use('/api/v1/signals', signalsRouter);
 app.use('/api/v1/simulate', simulateRouter);
 
