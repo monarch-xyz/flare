@@ -1,41 +1,48 @@
 /**
  * DSL Compiler - Transforms user-friendly conditions into expression trees
- * 
+ *
  * This module bridges the gap between:
  * - User DSL (ThresholdCondition, ChangeCondition, etc.) - easy to write
  * - Internal AST (ExpressionNode, Condition) - easy to evaluate
  */
 
-import {
-  Condition as InternalCondition,
-  ExpressionNode,
-  StateRef,
-  EventRef,
-  Constant,
+import type {
   BinaryExpression,
   ComparisonOp,
+  Constant,
+  EventRef,
+  ExpressionNode,
   Filter,
-} from '../types/index.js';
+  Condition as InternalCondition,
+  StateRef,
+} from "../types/index.js";
+
+import type {
+  AggregateCondition,
+  ChangeCondition,
+  ComparisonOperator,
+  GroupCondition,
+  MetricType,
+  SignalScope,
+  ThresholdCondition,
+  Condition as UserCondition,
+} from "../types/signal.js";
 
 import {
-  Condition as UserCondition,
-  ThresholdCondition,
-  ChangeCondition,
-  GroupCondition,
-  AggregateCondition,
-  MetricType,
-  ComparisonOperator,
-  SignalScope,
-} from '../types/signal.js';
-
-import { getMetric, MetricDef, isValidMetric, ChainedEventMetricDef, EventMetricDef, ComputedMetricDef } from './metrics.js';
+  ChainedEventMetricDef,
+  ComputedMetricDef,
+  EventMetricDef,
+  type MetricDef,
+  getMetric,
+  isValidMetric,
+} from "./metrics.js";
 
 /**
  * Result of compiling a group condition - needs special handling
  * because it evaluates multiple addresses independently
  */
 export interface CompiledGroupCondition {
-  type: 'group';
+  type: "group";
   addresses: string[];
   requirement: { count: number; of: number };
   /** The condition to evaluate for each address */
@@ -46,8 +53,8 @@ export interface CompiledGroupCondition {
  * Result of compiling an aggregate condition - evaluated across scope.
  */
 export interface CompiledAggregateCondition {
-  type: 'aggregate';
-  aggregation: AggregateCondition['aggregation'];
+  type: "aggregate";
+  aggregation: AggregateCondition["aggregation"];
   metric: MetricType;
   operator: ComparisonOp;
   value: number;
@@ -60,7 +67,10 @@ export interface CompiledAggregateCondition {
 /**
  * A compiled condition - either a simple condition or a group
  */
-export type CompiledCondition = InternalCondition | CompiledGroupCondition | CompiledAggregateCondition;
+export type CompiledCondition =
+  | InternalCondition
+  | CompiledGroupCondition
+  | CompiledAggregateCondition;
 
 /**
  * Compilation context - provides scope information for building filters
@@ -76,12 +86,12 @@ export interface CompilationContext {
 // ============================================
 
 const OPERATOR_MAP: Record<ComparisonOperator, ComparisonOp> = {
-  '>': 'gt',
-  '>=': 'gte',
-  '<': 'lt',
-  '<=': 'lte',
-  '==': 'eq',
-  '!=': 'neq',
+  ">": "gt",
+  ">=": "gte",
+  "<": "lt",
+  "<=": "lte",
+  "==": "eq",
+  "!=": "neq",
 };
 
 // ============================================
@@ -92,7 +102,7 @@ function resolveMetric(metricName: string): MetricDef {
   const metric = getMetric(metricName);
   if (!metric) {
     throw new Error(
-      `Unknown metric: "${metricName}". Use qualified names like "Morpho.Position.supplyShares".`
+      `Unknown metric: "${metricName}". Use qualified names like "Morpho.Position.supplyShares".`,
     );
   }
   return metric;
@@ -107,14 +117,14 @@ function resolveMetric(metricName: string): MetricDef {
  */
 function getMetricEntity(metricName: string): string {
   const metric = resolveMetric(metricName);
-  if (metric.kind === 'state') return metric.entity;
-  if (metric.kind === 'computed') {
+  if (metric.kind === "state") return metric.entity;
+  if (metric.kind === "computed") {
     // Computed metrics derive from their operands - check first operand
     const firstOperand = resolveMetric(metric.operands[0]);
-    return firstOperand.kind === 'state' ? firstOperand.entity : 'Event';
+    return firstOperand.kind === "state" ? firstOperand.entity : "Event";
   }
-  if (metric.kind === 'event' || metric.kind === 'chained_event') return 'Event';
-  return 'Unknown';
+  if (metric.kind === "event" || metric.kind === "chained_event") return "Event";
+  return "Unknown";
 }
 
 /**
@@ -128,7 +138,7 @@ function validateRequiredFilters(
   chainId?: number,
   marketId?: string,
   address?: string,
-  isGroupInner = false
+  isGroupInner = false,
 ): void {
   const entity = getMetricEntity(metricName);
 
@@ -137,7 +147,7 @@ function validateRequiredFilters(
     throw new Error(`chain_id is required for metric "${metricName}"`);
   }
 
-  if (entity === 'Position') {
+  if (entity === "Position") {
     if (!marketId) {
       throw new Error(`market_id is required for Position metric "${metricName}"`);
     }
@@ -145,7 +155,7 @@ function validateRequiredFilters(
     if (!address && !isGroupInner) {
       throw new Error(`address is required for Position metric "${metricName}"`);
     }
-  } else if (entity === 'Market') {
+  } else if (entity === "Market") {
     if (!marketId) {
       throw new Error(`market_id is required for Market metric "${metricName}"`);
     }
@@ -154,12 +164,12 @@ function validateRequiredFilters(
 }
 
 const RESERVED_EVENT_FILTER_FIELDS = new Set([
-  'chainId',
-  'marketId',
-  'market_id',
-  'user',
-  'onBehalf',
-  'timestamp',
+  "chainId",
+  "marketId",
+  "market_id",
+  "user",
+  "onBehalf",
+  "timestamp",
 ]);
 
 export function validateEventFilters(filters?: Filter[]): void {
@@ -181,7 +191,7 @@ export function validateEventFilters(filters?: Filter[]): void {
 // ============================================
 
 function constant(value: number): Constant {
-  return { type: 'constant', value };
+  return { type: "constant", value };
 }
 
 /**
@@ -194,19 +204,19 @@ function buildFilters(
   chainId: number,
   marketId?: string,
   address?: string,
-  extraFilters?: Filter[]
+  extraFilters?: Filter[],
 ): Filter[] {
   const filters: Filter[] = [];
 
   // Chain ID is always required
-  filters.push({ field: 'chainId', op: 'eq', value: chainId });
+  filters.push({ field: "chainId", op: "eq", value: chainId });
 
   if (marketId) {
-    filters.push({ field: 'marketId', op: 'eq', value: marketId });
+    filters.push({ field: "marketId", op: "eq", value: marketId });
   }
 
   if (address) {
-    filters.push({ field: 'user', op: 'eq', value: address });
+    filters.push({ field: "user", op: "eq", value: address });
   }
   // For group conditions: NO user filter added here - group evaluator adds it at eval time
 
@@ -219,19 +229,19 @@ function buildFilters(
 
 function buildStateRef(
   metricName: string,
-  snapshot: 'current' | 'window_start' | string,
+  snapshot: "current" | "window_start" | string,
   chainId: number,
   marketId?: string,
-  address?: string
+  address?: string,
 ): StateRef {
   const metric = resolveMetric(metricName);
 
-  if (metric.kind !== 'state') {
+  if (metric.kind !== "state") {
     throw new Error(`Metric "${metricName}" is not a state metric (got ${metric.kind})`);
   }
 
   return {
-    type: 'state',
+    type: "state",
     entity_type: metric.entity,
     filters: buildFilters(chainId, marketId, address),
     field: metric.field,
@@ -244,16 +254,16 @@ function buildEventRef(
   chainId: number,
   marketId?: string,
   address?: string,
-  extraFilters?: Filter[]
+  extraFilters?: Filter[],
 ): EventRef {
   const metric = resolveMetric(metricName);
 
-  if (metric.kind !== 'event') {
+  if (metric.kind !== "event") {
     throw new Error(`Metric "${metricName}" is not an event metric (got ${metric.kind})`);
   }
 
   return {
-    type: 'event',
+    type: "event",
     event_type: metric.eventType,
     filters: buildFilters(chainId, marketId, address, extraFilters),
     field: metric.field,
@@ -263,17 +273,17 @@ function buildEventRef(
 
 function isComputedMetric(metricName: string): boolean {
   const metric = getMetric(metricName);
-  return metric?.kind === 'computed';
+  return metric?.kind === "computed";
 }
 
 function isEventMetric(metricName: string): boolean {
   const metric = getMetric(metricName);
-  return metric?.kind === 'event';
+  return metric?.kind === "event";
 }
 
 function isChainedEventMetric(metricName: string): boolean {
   const metric = getMetric(metricName);
-  return metric?.kind === 'chained_event';
+  return metric?.kind === "chained_event";
 }
 
 /**
@@ -284,11 +294,11 @@ function buildChainedEventExpression(
   chainId: number,
   marketId?: string,
   address?: string,
-  extraFilters?: Filter[]
+  extraFilters?: Filter[],
 ): BinaryExpression {
   const metric = getMetric(metricName);
 
-  if (!metric || metric.kind !== 'chained_event') {
+  if (!metric || metric.kind !== "chained_event") {
     throw new Error(`Metric "${metricName}" is not a chained event metric`);
   }
 
@@ -297,7 +307,7 @@ function buildChainedEventExpression(
   const rightEvent = buildEventRef(rightMetric, chainId, marketId, address, extraFilters);
 
   return {
-    type: 'expression',
+    type: "expression",
     operator: metric.operation,
     left: leftEvent,
     right: rightEvent,
@@ -309,14 +319,14 @@ function buildChainedEventExpression(
  */
 function buildComputedExpression(
   metricName: string,
-  snapshot: 'current' | 'window_start' | string,
+  snapshot: "current" | "window_start" | string,
   chainId: number,
   marketId?: string,
-  address?: string
+  address?: string,
 ): BinaryExpression {
   const metric = getMetric(metricName);
 
-  if (!metric || metric.kind !== 'computed') {
+  if (!metric || metric.kind !== "computed") {
     throw new Error(`Metric "${metricName}" is not a computed metric`);
   }
 
@@ -324,14 +334,14 @@ function buildComputedExpression(
   const leftState = buildStateRef(leftMetric, snapshot, chainId, marketId, address);
   const rightState = buildStateRef(rightMetric, snapshot, chainId, marketId, address);
 
-  const operatorMap: Record<string, 'add' | 'sub' | 'mul' | 'div'> = {
-    ratio: 'div',
-    difference: 'sub',
+  const operatorMap: Record<string, "add" | "sub" | "mul" | "div"> = {
+    ratio: "div",
+    difference: "sub",
   };
 
   return {
-    type: 'expression',
-    operator: operatorMap[metric.computation] || 'div',
+    type: "expression",
+    operator: operatorMap[metric.computation] || "div",
     left: leftState,
     right: rightState,
   };
@@ -342,14 +352,19 @@ function buildComputedExpression(
  */
 export function buildMetricExpression(
   metricName: string,
-  snapshot: 'current' | 'window_start' | string,
+  snapshot: "current" | "window_start" | string,
   chainId: number,
   marketId?: string,
   address?: string,
-  extraFilters?: Filter[]
+  extraFilters?: Filter[],
 ): ExpressionNode {
-  if (extraFilters && extraFilters.length > 0 && !isEventMetric(metricName) && !isChainedEventMetric(metricName)) {
-    throw new Error('filters are only supported for event metrics');
+  if (
+    extraFilters &&
+    extraFilters.length > 0 &&
+    !isEventMetric(metricName) &&
+    !isChainedEventMetric(metricName)
+  ) {
+    throw new Error("filters are only supported for event metrics");
   }
   if (isChainedEventMetric(metricName)) {
     validateEventFilters(extraFilters);
@@ -382,9 +397,15 @@ type CompileOptions = {
  */
 function compileThreshold(cond: ThresholdCondition, opts: CompileOptions = {}): InternalCondition {
   // Validate required filters (address validation skipped for group inner conditions)
-  validateRequiredFilters(cond.metric, cond.chain_id, cond.market_id, cond.address, opts.isGroupInner);
+  validateRequiredFilters(
+    cond.metric,
+    cond.chain_id,
+    cond.market_id,
+    cond.address,
+    opts.isGroupInner,
+  );
   if (cond.filters && !isEventMetric(cond.metric) && !isChainedEventMetric(cond.metric)) {
-    throw new Error('filters are only supported for event metrics');
+    throw new Error("filters are only supported for event metrics");
   }
   validateEventFilters(cond.filters);
 
@@ -392,20 +413,32 @@ function compileThreshold(cond: ThresholdCondition, opts: CompileOptions = {}): 
 
   if (isChainedEventMetric(cond.metric)) {
     // Chained events: e.g., Morpho.Flow.netSupply = Supply - Withdraw
-    left = buildChainedEventExpression(cond.metric, cond.chain_id, cond.market_id, cond.address, cond.filters);
+    left = buildChainedEventExpression(
+      cond.metric,
+      cond.chain_id,
+      cond.market_id,
+      cond.address,
+      cond.filters,
+    );
   } else if (isEventMetric(cond.metric)) {
     // Single event aggregation
     left = buildEventRef(cond.metric, cond.chain_id, cond.market_id, cond.address, cond.filters);
   } else if (isComputedMetric(cond.metric)) {
     // Computed state metrics: e.g., Morpho.Market.utilization = borrow / supply
-    left = buildComputedExpression(cond.metric, 'current', cond.chain_id, cond.market_id, cond.address);
+    left = buildComputedExpression(
+      cond.metric,
+      "current",
+      cond.chain_id,
+      cond.market_id,
+      cond.address,
+    );
   } else {
     // Simple state metric (address may be undefined for group inner conditions)
-    left = buildStateRef(cond.metric, 'current', cond.chain_id, cond.market_id, cond.address);
+    left = buildStateRef(cond.metric, "current", cond.chain_id, cond.market_id, cond.address);
   }
 
   return {
-    type: 'condition',
+    type: "condition",
     left,
     operator: OPERATOR_MAP[cond.operator],
     right: constant(cond.value),
@@ -423,128 +456,145 @@ function compileThreshold(cond: ThresholdCondition, opts: CompileOptions = {}): 
  */
 function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): InternalCondition {
   // Validate required filters (address validation skipped for group inner conditions)
-  validateRequiredFilters(cond.metric, cond.chain_id, cond.market_id, cond.address, opts.isGroupInner);
+  validateRequiredFilters(
+    cond.metric,
+    cond.chain_id,
+    cond.market_id,
+    cond.address,
+    opts.isGroupInner,
+  );
 
-  if (cond.direction === 'any') {
+  if (cond.direction === "any") {
     throw new Error('Change direction "any" is not supported yet');
   }
 
   // For group inner conditions, address may be undefined - added at eval time
-  const current = buildStateRef(cond.metric, 'current', cond.chain_id, cond.market_id, cond.address);
-  const past = buildStateRef(cond.metric, 'window_start', cond.chain_id, cond.market_id, cond.address);
+  const current = buildStateRef(
+    cond.metric,
+    "current",
+    cond.chain_id,
+    cond.market_id,
+    cond.address,
+  );
+  const past = buildStateRef(
+    cond.metric,
+    "window_start",
+    cond.chain_id,
+    cond.market_id,
+    cond.address,
+  );
 
-  if ('percent' in cond.by) {
+  if ("percent" in cond.by) {
     const percentDecimal = cond.by.percent / 100;
 
-    if (cond.direction === 'decrease') {
+    if (cond.direction === "decrease") {
       // current < past * (1 - percent)
       const threshold: BinaryExpression = {
-        type: 'expression',
-        operator: 'mul',
+        type: "expression",
+        operator: "mul",
         left: past,
         right: constant(1 - percentDecimal),
       };
       return {
-        type: 'condition',
+        type: "condition",
         left: current,
-        operator: 'lt',
+        operator: "lt",
         right: threshold,
       };
-    } else if (cond.direction === 'increase') {
+    }
+    if (cond.direction === "increase") {
       // current > past * (1 + percent)
       const threshold: BinaryExpression = {
-        type: 'expression',
-        operator: 'mul',
+        type: "expression",
+        operator: "mul",
         left: past,
         right: constant(1 + percentDecimal),
       };
       return {
-        type: 'condition',
+        type: "condition",
         left: current,
-        operator: 'gt',
+        operator: "gt",
         right: threshold,
       };
-    } else {
-      // 'any' direction: |current - past| / past > percent
-      // Simplified: current/past < (1 - percent) OR current/past > (1 + percent)
-      // For simplicity, we check if ratio is outside [1-percent, 1+percent]
-      // We'll check: abs(current - past) > past * percent
-      const diff: BinaryExpression = {
-        type: 'expression',
-        operator: 'sub',
-        left: current,
-        right: past,
-      };
-      const threshold: BinaryExpression = {
-        type: 'expression',
-        operator: 'mul',
-        left: past,
-        right: constant(percentDecimal),
-      };
-      // For 'any', we check if the absolute change exceeds threshold
-      // Simplification: we check decrease case (current < past * (1-percent))
-      // A full implementation would need OR logic
-      return {
-        type: 'condition',
-        left: current,
-        operator: 'lt',
-        right: {
-          type: 'expression',
-          operator: 'mul',
-          left: past,
-          right: constant(1 - percentDecimal),
-        },
-      };
     }
-  } else {
-    // Absolute change
-    const absoluteValue = cond.by.absolute;
-
-    if (cond.direction === 'decrease') {
-      // (past - current) > absolute
-      const diff: BinaryExpression = {
-        type: 'expression',
-        operator: 'sub',
+    // 'any' direction: |current - past| / past > percent
+    // Simplified: current/past < (1 - percent) OR current/past > (1 + percent)
+    // For simplicity, we check if ratio is outside [1-percent, 1+percent]
+    // We'll check: abs(current - past) > past * percent
+    const diff: BinaryExpression = {
+      type: "expression",
+      operator: "sub",
+      left: current,
+      right: past,
+    };
+    const threshold: BinaryExpression = {
+      type: "expression",
+      operator: "mul",
+      left: past,
+      right: constant(percentDecimal),
+    };
+    // For 'any', we check if the absolute change exceeds threshold
+    // Simplification: we check decrease case (current < past * (1-percent))
+    // A full implementation would need OR logic
+    return {
+      type: "condition",
+      left: current,
+      operator: "lt",
+      right: {
+        type: "expression",
+        operator: "mul",
         left: past,
-        right: current,
-      };
-      return {
-        type: 'condition',
-        left: diff,
-        operator: 'gt',
-        right: constant(absoluteValue),
-      };
-    } else if (cond.direction === 'increase') {
-      // (current - past) > absolute
-      const diff: BinaryExpression = {
-        type: 'expression',
-        operator: 'sub',
-        left: current,
-        right: past,
-      };
-      return {
-        type: 'condition',
-        left: diff,
-        operator: 'gt',
-        right: constant(absoluteValue),
-      };
-    } else {
-      // 'any' direction: abs(current - past) > absolute
-      // Simplified: (past - current) > absolute (checks decrease)
-      const diff: BinaryExpression = {
-        type: 'expression',
-        operator: 'sub',
-        left: past,
-        right: current,
-      };
-      return {
-        type: 'condition',
-        left: diff,
-        operator: 'gt',
-        right: constant(absoluteValue),
-      };
-    }
+        right: constant(1 - percentDecimal),
+      },
+    };
   }
+  // Absolute change
+  const absoluteValue = cond.by.absolute;
+
+  if (cond.direction === "decrease") {
+    // (past - current) > absolute
+    const diff: BinaryExpression = {
+      type: "expression",
+      operator: "sub",
+      left: past,
+      right: current,
+    };
+    return {
+      type: "condition",
+      left: diff,
+      operator: "gt",
+      right: constant(absoluteValue),
+    };
+  }
+  if (cond.direction === "increase") {
+    // (current - past) > absolute
+    const diff: BinaryExpression = {
+      type: "expression",
+      operator: "sub",
+      left: current,
+      right: past,
+    };
+    return {
+      type: "condition",
+      left: diff,
+      operator: "gt",
+      right: constant(absoluteValue),
+    };
+  }
+  // 'any' direction: abs(current - past) > absolute
+  // Simplified: (past - current) > absolute (checks decrease)
+  const diff: BinaryExpression = {
+    type: "expression",
+    operator: "sub",
+    left: past,
+    right: current,
+  };
+  return {
+    type: "condition",
+    left: diff,
+    operator: "gt",
+    right: constant(absoluteValue),
+  };
 }
 
 /**
@@ -560,12 +610,12 @@ function compileGroup(cond: GroupCondition): CompiledGroupCondition {
   const innerCompiled = compileCondition(cond.condition, { isGroupInner: true });
 
   // Group conditions can't be nested (inner must be a simple condition)
-  if ('type' in innerCompiled && innerCompiled.type === 'group') {
-    throw new Error('Nested group conditions are not supported');
+  if ("type" in innerCompiled && innerCompiled.type === "group") {
+    throw new Error("Nested group conditions are not supported");
   }
 
   return {
-    type: 'group',
+    type: "group",
     addresses: cond.addresses,
     requirement: cond.requirement,
     perAddressCondition: innerCompiled as InternalCondition,
@@ -575,23 +625,23 @@ function compileGroup(cond: GroupCondition): CompiledGroupCondition {
 /**
  * Compiles an aggregate condition:
  * { type: 'aggregate', aggregation: 'sum', metric: 'Morpho.Market.totalSupplyAssets', operator: '>', value: 1000000, chain_id: 1 }
- * 
+ *
  * This creates an event-based aggregation across the scope
  */
 function compileAggregate(cond: AggregateCondition): CompiledAggregateCondition {
   // Validate chain_id is required
   if (cond.chain_id === undefined) {
-    throw new Error(`chain_id is required for aggregate condition`);
+    throw new Error("chain_id is required for aggregate condition");
   }
 
   resolveMetric(cond.metric);
   if (cond.filters && !isEventMetric(cond.metric) && !isChainedEventMetric(cond.metric)) {
-    throw new Error('filters are only supported for event metrics');
+    throw new Error("filters are only supported for event metrics");
   }
   validateEventFilters(cond.filters);
 
   return {
-    type: 'aggregate',
+    type: "aggregate",
     aggregation: cond.aggregation,
     metric: cond.metric,
     operator: OPERATOR_MAP[cond.operator],
@@ -609,15 +659,18 @@ function compileAggregate(cond: AggregateCondition): CompiledAggregateCondition 
 /**
  * Compiles a user-friendly condition into an internal expression tree
  */
-export function compileCondition(cond: UserCondition, opts: CompileOptions = {}): CompiledCondition {
+export function compileCondition(
+  cond: UserCondition,
+  opts: CompileOptions = {},
+): CompiledCondition {
   switch (cond.type) {
-    case 'threshold':
+    case "threshold":
       return compileThreshold(cond, opts);
-    case 'change':
+    case "change":
       return compileChange(cond, opts);
-    case 'group':
+    case "group":
       return compileGroup(cond);
-    case 'aggregate':
+    case "aggregate":
       return compileAggregate(cond);
     default:
       throw new Error(`Unknown condition type: ${(cond as any).type}`);
@@ -630,8 +683,8 @@ export function compileCondition(cond: UserCondition, opts: CompileOptions = {})
  */
 export function compileConditions(
   conditions: UserCondition[],
-  logic: 'AND' | 'OR' = 'AND'
-): { conditions: CompiledCondition[]; logic: 'AND' | 'OR' } {
+  logic: "AND" | "OR" = "AND",
+): { conditions: CompiledCondition[]; logic: "AND" | "OR" } {
   return {
     conditions: conditions.map((c) => compileCondition(c)),
     logic,
@@ -642,12 +695,12 @@ export function compileConditions(
  * Type guard to check if a compiled condition is a group condition
  */
 export function isGroupCondition(cond: CompiledCondition): cond is CompiledGroupCondition {
-  return 'type' in cond && cond.type === 'group' && 'addresses' in cond;
+  return "type" in cond && cond.type === "group" && "addresses" in cond;
 }
 
 /**
  * Type guard to check if a compiled condition is a simple condition
  */
 export function isSimpleCondition(cond: CompiledCondition): cond is InternalCondition {
-  return 'type' in cond && cond.type === 'condition';
+  return "type" in cond && cond.type === "condition";
 }

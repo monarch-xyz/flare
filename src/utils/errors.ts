@@ -1,0 +1,35 @@
+/**
+ * Error utilities for type-safe error handling
+ */
+
+export interface ErrorWithMessage {
+  message: string;
+  name?: string;
+  stack?: string;
+}
+
+export function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as Record<string, unknown>).message === "string"
+  );
+}
+
+export function toErrorWithMessage(maybeError: unknown): ErrorWithMessage {
+  if (isErrorWithMessage(maybeError)) return maybeError;
+  try {
+    return new Error(JSON.stringify(maybeError));
+  } catch {
+    return new Error(String(maybeError));
+  }
+}
+
+export function getErrorMessage(error: unknown): string {
+  return toErrorWithMessage(error).message;
+}
+
+export function isZodError(error: unknown): error is { name: "ZodError"; errors: unknown[] } {
+  return isErrorWithMessage(error) && error.name === "ZodError";
+}

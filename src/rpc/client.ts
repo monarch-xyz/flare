@@ -5,51 +5,51 @@
  * This is a complementary data source to the indexer (Envio), not a fallback.
  */
 
-import { createPublicClient, http, type PublicClient, type Chain, defineChain } from 'viem';
-import { mainnet, base, polygon, arbitrum } from 'viem/chains';
+import { http, type Chain, type PublicClient, createPublicClient, defineChain } from "viem";
+import { arbitrum, base, mainnet, polygon } from "viem/chains";
 
 /**
  * Custom chain definitions for chains not in viem's default set
  */
 const unichain = defineChain({
   id: 130,
-  name: 'Unichain',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  name: "Unichain",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://mainnet.unichain.org'] },
+    default: { http: ["https://mainnet.unichain.org"] },
   },
   blockExplorers: {
-    default: { name: 'Uniscan', url: 'https://uniscan.xyz' },
+    default: { name: "Uniscan", url: "https://uniscan.xyz" },
   },
 });
 
 const hyperEvm = defineChain({
   id: 999,
-  name: 'HyperEVM',
-  nativeCurrency: { name: 'HYPE', symbol: 'HYPE', decimals: 18 },
+  name: "HyperEVM",
+  nativeCurrency: { name: "HYPE", symbol: "HYPE", decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://rpc.hyperliquid.xyz/evm'] },
+    default: { http: ["https://rpc.hyperliquid.xyz/evm"] },
   },
   blockExplorers: {
-    default: { name: 'HyperEVM Explorer', url: 'https://explorer.hyperliquid.xyz' },
+    default: { name: "HyperEVM Explorer", url: "https://explorer.hyperliquid.xyz" },
   },
 });
 
 const monad = defineChain({
   id: 10143,
-  name: 'Monad Testnet',
-  nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
+  name: "Monad Testnet",
+  nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://testnet-rpc.monad.xyz'] },
+    default: { http: ["https://testnet-rpc.monad.xyz"] },
   },
   blockExplorers: {
-    default: { name: 'Monad Explorer', url: 'https://testnet.monadexplorer.com' },
+    default: { name: "Monad Explorer", url: "https://testnet.monadexplorer.com" },
   },
 });
-import { morphoAbi, MORPHO_ADDRESSES, type PositionResult, type MarketResult } from './abi.js';
-import { createLogger } from '../utils/logger.js';
+import { createLogger } from "../utils/logger.js";
+import { MORPHO_ADDRESSES, type MarketResult, type PositionResult, morphoAbi } from "./abi.js";
 
-const logger = createLogger('rpc-client');
+const logger = createLogger("rpc-client");
 
 /**
  * Error thrown when RPC queries fail
@@ -58,10 +58,10 @@ export class RpcQueryError extends Error {
   constructor(
     message: string,
     public readonly chainId: number,
-    public readonly blockNumber?: bigint
+    public readonly blockNumber?: bigint,
   ) {
     super(message);
-    this.name = 'RpcQueryError';
+    this.name = "RpcQueryError";
   }
 }
 
@@ -86,7 +86,7 @@ function getRpcUrl(chainId: number): string | undefined {
   const envVar = process.env[`RPC_URL_${chainId}`];
   if (envVar) {
     // Take first URL if comma-separated
-    return envVar.split(',')[0]?.trim();
+    return envVar.split(",")[0]?.trim();
   }
   return undefined;
 }
@@ -133,7 +133,7 @@ export async function readPositionAtBlock(
   chainId: number,
   marketId: string,
   user: string,
-  blockNumber: bigint
+  blockNumber: bigint,
 ): Promise<PositionResult> {
   const morphoAddress = MORPHO_ADDRESSES[chainId];
   if (!morphoAddress) {
@@ -143,12 +143,15 @@ export async function readPositionAtBlock(
   const client = getPublicClient(chainId);
 
   try {
-    logger.debug({ chainId, marketId, user, blockNumber: blockNumber.toString() }, 'Reading position at block');
+    logger.debug(
+      { chainId, marketId, user, blockNumber: blockNumber.toString() },
+      "Reading position at block",
+    );
 
     const result = await client.readContract({
       address: morphoAddress,
       abi: morphoAbi,
-      functionName: 'position',
+      functionName: "position",
       args: [marketId as `0x${string}`, user as `0x${string}`],
       blockNumber,
     });
@@ -163,7 +166,10 @@ export async function readPositionAtBlock(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error({ chainId, marketId, user, blockNumber: blockNumber.toString(), error: message }, 'Failed to read position');
+    logger.error(
+      { chainId, marketId, user, blockNumber: blockNumber.toString(), error: message },
+      "Failed to read position",
+    );
     throw new RpcQueryError(`Failed to read position: ${message}`, chainId, blockNumber);
   }
 }
@@ -179,7 +185,7 @@ export async function readPositionAtBlock(
 export async function readMarketAtBlock(
   chainId: number,
   marketId: string,
-  blockNumber: bigint
+  blockNumber: bigint,
 ): Promise<MarketResult> {
   const morphoAddress = MORPHO_ADDRESSES[chainId];
   if (!morphoAddress) {
@@ -189,25 +195,28 @@ export async function readMarketAtBlock(
   const client = getPublicClient(chainId);
 
   try {
-    logger.debug({ chainId, marketId, blockNumber: blockNumber.toString() }, 'Reading market at block');
+    logger.debug(
+      { chainId, marketId, blockNumber: blockNumber.toString() },
+      "Reading market at block",
+    );
 
     const result = await client.readContract({
       address: morphoAddress,
       abi: morphoAbi,
-      functionName: 'market',
+      functionName: "market",
       args: [marketId as `0x${string}`],
       blockNumber,
     });
 
     // Result is a tuple
-    const [totalSupplyAssets, totalSupplyShares, totalBorrowAssets, totalBorrowShares, lastUpdate, fee] = result as [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint
-    ];
+    const [
+      totalSupplyAssets,
+      totalSupplyShares,
+      totalBorrowAssets,
+      totalBorrowShares,
+      lastUpdate,
+      fee,
+    ] = result as [bigint, bigint, bigint, bigint, bigint, bigint];
 
     return {
       totalSupplyAssets,
@@ -219,7 +228,10 @@ export async function readMarketAtBlock(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error({ chainId, marketId, blockNumber: blockNumber.toString(), error: message }, 'Failed to read market');
+    logger.error(
+      { chainId, marketId, blockNumber: blockNumber.toString(), error: message },
+      "Failed to read market",
+    );
     throw new RpcQueryError(`Failed to read market: ${message}`, chainId, blockNumber);
   }
 }
@@ -230,7 +242,7 @@ export async function readMarketAtBlock(
 export async function readPosition(
   chainId: number,
   marketId: string,
-  user: string
+  user: string,
 ): Promise<PositionResult> {
   const morphoAddress = MORPHO_ADDRESSES[chainId];
   if (!morphoAddress) {
@@ -243,7 +255,7 @@ export async function readPosition(
     const result = await client.readContract({
       address: morphoAddress,
       abi: morphoAbi,
-      functionName: 'position',
+      functionName: "position",
       args: [marketId as `0x${string}`, user as `0x${string}`],
     });
 
@@ -270,20 +282,27 @@ export async function readMarket(chainId: number, marketId: string): Promise<Mar
     const result = await client.readContract({
       address: morphoAddress,
       abi: morphoAbi,
-      functionName: 'market',
+      functionName: "market",
       args: [marketId as `0x${string}`],
     });
 
-    const [totalSupplyAssets, totalSupplyShares, totalBorrowAssets, totalBorrowShares, lastUpdate, fee] = result as [
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint,
-      bigint
-    ];
+    const [
+      totalSupplyAssets,
+      totalSupplyShares,
+      totalBorrowAssets,
+      totalBorrowShares,
+      lastUpdate,
+      fee,
+    ] = result as [bigint, bigint, bigint, bigint, bigint, bigint];
 
-    return { totalSupplyAssets, totalSupplyShares, totalBorrowAssets, totalBorrowShares, lastUpdate, fee };
+    return {
+      totalSupplyAssets,
+      totalSupplyShares,
+      totalBorrowAssets,
+      totalBorrowShares,
+      lastUpdate,
+      fee,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new RpcQueryError(`Failed to read market: ${message}`, chainId);

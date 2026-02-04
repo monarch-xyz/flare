@@ -1,16 +1,16 @@
-import type { Request, Response, NextFunction } from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import { createLogger } from '../../utils/logger.js';
+import type { NextFunction, Request, Response } from "express";
+import { v4 as uuidv4 } from "uuid";
+import { createLogger } from "../../utils/logger.js";
 
-const logger = createLogger('api:request');
+const logger = createLogger("api:request");
 
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const requestId = uuidv4();
-  res.setHeader('X-Request-Id', requestId);
+  res.setHeader("X-Request-Id", requestId);
 
   const startTime = process.hrtime.bigint();
 
-  res.on('finish', () => {
+  res.on("finish", () => {
     const durationMs = Number(process.hrtime.bigint() - startTime) / 1_000_000;
     logger.info(
       {
@@ -20,7 +20,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
         status: res.statusCode,
         durationMs,
       },
-      'Request completed'
+      "Request completed",
     );
   });
 

@@ -1,15 +1,15 @@
 #!/usr/bin/env npx tsx
 /**
  * CLI tool to test if a condition would trigger given current blockchain state.
- * 
+ *
  * Usage:
  *   pnpm tsx src/scripts/test-condition.ts <condition.json>
  *   pnpm tsx src/scripts/test-condition.ts --inline '{"type":"threshold",...}'
- * 
+ *
  * Examples:
  *   # Test from file
  *   pnpm tsx src/scripts/test-condition.ts tests/fixtures/whale-drop.json
- * 
+ *
  *   # Test inline JSON
  *   pnpm tsx src/scripts/test-condition.ts --inline '{
  *     "type": "threshold",
@@ -18,28 +18,28 @@
  *     "value": 0.9,
  *     "market_id": "0x..."
  *   }'
- * 
+ *
  *   # With custom window
  *   pnpm tsx src/scripts/test-condition.ts --window 7d --inline '...'
- * 
+ *
  *   # Dry run (show compiled AST without executing)
  *   pnpm tsx src/scripts/test-condition.ts --dry-run --inline '...'
  */
 
-import { readFileSync } from 'fs';
-import { compileConditions, CompiledCondition } from '../engine/compiler.js';
-import { evaluateConditionSet, type EvaluatableSignal } from '../engine/condition.js';
-import { EvalContext } from '../engine/evaluator.js';
-import { compileSignalDefinition } from '../engine/compile-signal.js';
-import { SignalDefinition } from '../types/signal.js';
-import { EnvioClient } from '../envio/client.js';
-import { createMorphoFetcher } from '../engine/morpho-fetcher.js';
-import { parseDuration } from '../utils/duration.js';
-import { Condition as UserCondition } from '../types/signal.js';
-import { config } from '../config/index.js';
-import { createLogger } from '../utils/logger.js';
+import { readFileSync } from "node:fs";
+import { config } from "../config/index.js";
+import { compileSignalDefinition } from "../engine/compile-signal.js";
+import { type CompiledCondition, compileConditions } from "../engine/compiler.js";
+import { type EvaluatableSignal, evaluateConditionSet } from "../engine/condition.js";
+import type { EvalContext } from "../engine/evaluator.js";
+import { createMorphoFetcher } from "../engine/morpho-fetcher.js";
+import { EnvioClient } from "../envio/client.js";
+import type { SignalDefinition } from "../types/signal.js";
+import type { Condition as UserCondition } from "../types/signal.js";
+import { parseDuration } from "../utils/duration.js";
+import { createLogger } from "../utils/logger.js";
 
-const logger = createLogger('test-condition');
+const logger = createLogger("test-condition");
 
 // ============================================
 // Argument Parsing
@@ -57,7 +57,7 @@ interface Args {
 function parseArgs(): Args {
   const args = process.argv.slice(2);
   const result: Args = {
-    window: '1h',
+    window: "1h",
     chainId: 1,
     dryRun: false,
     verbose: false,
@@ -65,21 +65,21 @@ function parseArgs(): Args {
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
-    if (arg === '--inline' && args[i + 1]) {
+
+    if (arg === "--inline" && args[i + 1]) {
       result.inlineJson = args[++i];
-    } else if (arg === '--window' && args[i + 1]) {
+    } else if (arg === "--window" && args[i + 1]) {
       result.window = args[++i];
-    } else if (arg === '--chain' && args[i + 1]) {
-      result.chainId = parseInt(args[++i], 10);
-    } else if (arg === '--dry-run') {
+    } else if (arg === "--chain" && args[i + 1]) {
+      result.chainId = Number.parseInt(args[++i], 10);
+    } else if (arg === "--dry-run") {
       result.dryRun = true;
-    } else if (arg === '--verbose' || arg === '-v') {
+    } else if (arg === "--verbose" || arg === "-v") {
       result.verbose = true;
-    } else if (arg === '--help' || arg === '-h') {
+    } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
-    } else if (!arg.startsWith('-')) {
+    } else if (!arg.startsWith("-")) {
       result.conditionFile = arg;
     }
   }
@@ -146,10 +146,10 @@ async function main() {
   if (args.inlineJson) {
     conditionJson = args.inlineJson;
   } else if (args.conditionFile) {
-    conditionJson = readFileSync(args.conditionFile, 'utf-8');
+    conditionJson = readFileSync(args.conditionFile, "utf-8");
   } else {
-    console.error('Error: Provide either --inline <json> or a condition file path');
-    console.error('Run with --help for usage');
+    console.error("Error: Provide either --inline <json> or a condition file path");
+    console.error("Run with --help for usage");
     process.exit(1);
   }
 
@@ -157,43 +157,45 @@ async function main() {
   try {
     parsed = JSON.parse(conditionJson);
   } catch (e) {
-    console.error('Error: Invalid JSON');
+    console.error("Error: Invalid JSON");
     console.error(e);
     process.exit(1);
   }
 
   // Detect if this is a full signal definition or a single condition
-  const isSignalDefinition = (obj: unknown): obj is { definition: SignalDefinition } | SignalDefinition => {
-    if (typeof obj !== 'object' || obj === null) return false;
+  const isSignalDefinition = (
+    obj: unknown,
+  ): obj is { definition: SignalDefinition } | SignalDefinition => {
+    if (typeof obj !== "object" || obj === null) return false;
     // Full signal with wrapper: { name, definition: { conditions, ... } }
-    if ('definition' in obj && typeof (obj as { definition: unknown }).definition === 'object') {
+    if ("definition" in obj && typeof (obj as { definition: unknown }).definition === "object") {
       const def = (obj as { definition: { conditions?: unknown } }).definition;
-      return 'conditions' in def && Array.isArray(def.conditions);
+      return "conditions" in def && Array.isArray(def.conditions);
     }
     // Just the definition: { conditions: [...], logic: 'AND' }
-    return 'conditions' in obj && Array.isArray((obj as { conditions: unknown }).conditions);
+    return "conditions" in obj && Array.isArray((obj as { conditions: unknown }).conditions);
   };
 
   let userConditions: UserCondition[];
-  let logic: 'AND' | 'OR' = 'AND';
+  let logic: "AND" | "OR" = "AND";
   let signalName: string | undefined;
   let compiledFromSignal = false;
   let compiledSignal: EvaluatableSignal | undefined;
 
   if (isSignalDefinition(parsed)) {
     // Extract from signal definition
-    const def = 'definition' in parsed ? parsed.definition : parsed as SignalDefinition;
+    const def = "definition" in parsed ? parsed.definition : (parsed as SignalDefinition);
     userConditions = def.conditions;
-    logic = def.logic ?? 'AND';
-    signalName = 'name' in parsed ? (parsed as { name: string }).name : undefined;
+    logic = def.logic ?? "AND";
+    signalName = "name" in parsed ? (parsed as { name: string }).name : undefined;
     // Override window from signal if not specified on CLI
-    if (def.window?.duration && args.window === '1h') {
+    if (def.window?.duration && args.window === "1h") {
       args.window = def.window.duration;
     }
     const compiled = compileSignalDefinition(def);
     compiledFromSignal = true;
     compiledSignal = {
-      id: signalName ?? 'inline-signal',
+      id: signalName ?? "inline-signal",
       chains: compiled.ast.chains,
       window: compiled.ast.window,
       conditions: compiled.ast.conditions,
@@ -204,16 +206,16 @@ async function main() {
     userConditions = [parsed as UserCondition];
   }
 
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('🔥 Flare Condition Tester');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("🔥 Flare Condition Tester");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log();
   if (signalName) {
     console.log(`Signal: ${signalName}`);
   }
   console.log(`Conditions: ${userConditions.length} (logic: ${logic})`);
   console.log();
-  console.log('Input:');
+  console.log("Input:");
   console.log(JSON.stringify(userConditions, null, 2));
   console.log();
 
@@ -228,7 +230,7 @@ async function main() {
       compiledList = result.conditions;
     }
   } catch (e) {
-    console.error('❌ Compilation Error:', e instanceof Error ? e.message : e);
+    console.error("❌ Compilation Error:", e instanceof Error ? e.message : e);
     process.exit(1);
   }
 
@@ -240,7 +242,7 @@ async function main() {
   console.log();
 
   if (args.dryRun) {
-    console.log('✓ Dry run complete');
+    console.log("✓ Dry run complete");
     process.exit(0);
   }
 
@@ -268,15 +270,19 @@ async function main() {
     fetchState: async (ref, ts) => {
       const value = await fetcher.fetchState(ref, ts);
       if (args.verbose) {
-        const source = ts === undefined ? 'RPC (current)' : 'RPC (historical)';
-        console.log(`  fetchState(${ref.entity_type}.${ref.field}, ${ref.snapshot ?? 'current'}) [${source}] = ${value}`);
+        const source = ts === undefined ? "RPC (current)" : "RPC (historical)";
+        console.log(
+          `  fetchState(${ref.entity_type}.${ref.field}, ${ref.snapshot ?? "current"}) [${source}] = ${value}`,
+        );
       }
       return value;
     },
     fetchEvents: async (ref, start, end) => {
       const value = await fetcher.fetchEvents(ref, start, end);
       if (args.verbose) {
-        console.log(`  fetchEvents(${ref.event_type}.${ref.field}, ${ref.aggregation}) [Envio] = ${value}`);
+        console.log(
+          `  fetchEvents(${ref.event_type}.${ref.field}, ${ref.aggregation}) [Envio] = ${value}`,
+        );
       }
       return value;
     },
@@ -290,38 +296,40 @@ async function main() {
       const compiled = compiledList[i];
 
       if (args.verbose) {
-        console.log(`\n--- Evaluating condition ${i + 1}/${compiledList.length} (${userConditions[i]?.type ?? 'condition'}) ---`);
+        console.log(
+          `\n--- Evaluating condition ${i + 1}/${compiledList.length} (${userConditions[i]?.type ?? "condition"}) ---`,
+        );
       }
 
-      const result = await evaluateConditionSet([compiled], 'AND', context);
-      results.push({ index: i + 1, type: userConditions[i]?.type ?? 'condition', result });
+      const result = await evaluateConditionSet([compiled], "AND", context);
+      results.push({ index: i + 1, type: userConditions[i]?.type ?? "condition", result });
     }
 
     const finalResult = await evaluateConditionSet(compiledList, logic, context);
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Results:');
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("Results:");
     for (const r of results) {
-      const icon = r.result ? '✅' : '⭕';
-      console.log(`  ${icon} Condition ${r.index} (${r.type}): ${r.result ? 'TRUE' : 'FALSE'}`);
+      const icon = r.result ? "✅" : "⭕";
+      console.log(`  ${icon} Condition ${r.index} (${r.type}): ${r.result ? "TRUE" : "FALSE"}`);
     }
     console.log();
     console.log(`Logic: ${logic}`);
     if (finalResult) {
-      console.log('✅ TRIGGERED: Signal evaluates to TRUE');
+      console.log("✅ TRIGGERED: Signal evaluates to TRUE");
     } else {
-      console.log('⭕ NOT TRIGGERED: Signal evaluates to FALSE');
+      console.log("⭕ NOT TRIGGERED: Signal evaluates to FALSE");
     }
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     process.exit(0);
   } catch (e) {
-    console.error('❌ Evaluation Error:', e instanceof Error ? e.message : e);
+    console.error("❌ Evaluation Error:", e instanceof Error ? e.message : e);
     process.exit(1);
   }
 }
 
 main().catch((e) => {
-  console.error('Fatal error:', e);
+  console.error("Fatal error:", e);
   process.exit(1);
 });

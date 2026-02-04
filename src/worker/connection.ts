@@ -2,8 +2,8 @@
  * Shared Redis connection for BullMQ
  */
 
-import IORedis from 'ioredis';
-import { config } from '../config/index.js';
+import IORedis from "ioredis";
+import { config } from "../config/index.js";
 
 // Create shared Redis connection for BullMQ
 // BullMQ requires IORedis instance, not a URL string

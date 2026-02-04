@@ -5,54 +5,54 @@
  * is handled by DataFetcher implementations (e.g., MorphoDataFetcher).
  */
 
-import { evaluateCondition, evaluateNode, EvalContext } from './evaluator.js';
 import {
-  Condition as AstCondition,
-  ComparisonOp,
-  ExpressionNode,
+  type Condition as AstCondition,
+  type ComparisonOp,
   EventRef,
-  Filter,
+  type ExpressionNode,
+  type Filter,
   StateRef,
-} from '../types/index.js';
+} from "../types/index.js";
+import { parseDuration } from "../utils/duration.js";
+import { createLogger } from "../utils/logger.js";
 import {
-  buildMetricExpression,
-  isSimpleCondition,
   type CompiledAggregateCondition,
   type CompiledCondition,
-} from './compiler.js';
-import { getMetric } from './metrics.js';
-import { parseDuration } from '../utils/duration.js';
-import type { DataFetcher } from './fetcher.js';
-import { createLogger } from '../utils/logger.js';
+  buildMetricExpression,
+  isSimpleCondition,
+} from "./compiler.js";
+import { type EvalContext, evaluateCondition, evaluateNode } from "./evaluator.js";
+import type { DataFetcher } from "./fetcher.js";
+import { getMetric } from "./metrics.js";
 
-const logger = createLogger('signal-evaluator');
+const logger = createLogger("signal-evaluator");
 
-function getMetricEntity(metricName: string): 'Position' | 'Market' | 'Event' | 'Unknown' {
+function getMetricEntity(metricName: string): "Position" | "Market" | "Event" | "Unknown" {
   const metric = getMetric(metricName);
-  if (!metric) return 'Unknown';
-  if (metric.kind === 'state') return metric.entity as 'Position' | 'Market';
-  if (metric.kind === 'computed') {
+  if (!metric) return "Unknown";
+  if (metric.kind === "state") return metric.entity as "Position" | "Market";
+  if (metric.kind === "computed") {
     return getMetricEntity(metric.operands[0]);
   }
-  if (metric.kind === 'event' || metric.kind === 'chained_event') return 'Event';
-  return 'Unknown';
+  if (metric.kind === "event" || metric.kind === "chained_event") return "Event";
+  return "Unknown";
 }
 
 function upsertUserFilter(filters: Filter[], address: string): Filter[] {
-  const next = filters.filter((filter) => filter.field !== 'user');
-  next.push({ field: 'user', op: 'eq', value: address });
+  const next = filters.filter((filter) => filter.field !== "user");
+  next.push({ field: "user", op: "eq", value: address });
   return next;
 }
 
 function applyUserFilterToNode(node: ExpressionNode, address: string): ExpressionNode {
   switch (node.type) {
-    case 'constant':
+    case "constant":
       return node;
-    case 'state':
+    case "state":
       return { ...node, filters: upsertUserFilter(node.filters, address) };
-    case 'event':
+    case "event":
       return { ...node, filters: upsertUserFilter(node.filters, address) };
-    case 'expression':
+    case "expression":
       return {
         ...node,
         left: applyUserFilterToNode(node.left, address),
@@ -65,52 +65,57 @@ function applyUserFilterToNode(node: ExpressionNode, address: string): Expressio
 
 function compareValues(left: number, operator: ComparisonOp, right: number): boolean {
   switch (operator) {
-    case 'gt':
+    case "gt":
       return left > right;
-    case 'gte':
+    case "gte":
       return left >= right;
-    case 'lt':
+    case "lt":
       return left < right;
-    case 'lte':
+    case "lte":
       return left <= right;
-    case 'eq':
+    case "eq":
       return left === right;
-    case 'neq':
+    case "neq":
       return left !== right;
     default:
       return false;
   }
 }
 
-function aggregateValues(values: number[], aggregation: CompiledAggregateCondition['aggregation']): number {
+function aggregateValues(
+  values: number[],
+  aggregation: CompiledAggregateCondition["aggregation"],
+): number {
   if (values.length === 0) return 0;
   switch (aggregation) {
-    case 'sum':
+    case "sum":
       return values.reduce((acc, value) => acc + value, 0);
-    case 'avg':
+    case "avg":
       return values.reduce((acc, value) => acc + value, 0) / values.length;
-    case 'min':
+    case "min":
       return Math.min(...values);
-    case 'max':
+    case "max":
       return Math.max(...values);
-    case 'count':
+    case "count":
       return values.length;
     default:
       return 0;
   }
 }
 
-function buildAggregateTargets(cond: CompiledAggregateCondition): Array<{ marketId?: string; address?: string }> {
+function buildAggregateTargets(
+  cond: CompiledAggregateCondition,
+): Array<{ marketId?: string; address?: string }> {
   const metricEntity = getMetricEntity(cond.metric);
   const marketIds = cond.marketIds && cond.marketIds.length > 0 ? cond.marketIds : undefined;
   const addresses = cond.addresses && cond.addresses.length > 0 ? cond.addresses : undefined;
 
-  if (metricEntity === 'Market') {
+  if (metricEntity === "Market") {
     if (!marketIds) return [];
     return marketIds.map((marketId) => ({ marketId }));
   }
 
-  if (metricEntity === 'Position') {
+  if (metricEntity === "Position") {
     if (!marketIds || !addresses) return [];
     const targets: Array<{ marketId?: string; address?: string }> = [];
     for (const marketId of marketIds) {
@@ -134,11 +139,11 @@ function buildAggregateTargets(cond: CompiledAggregateCondition): Array<{ market
 
 async function evaluateAggregateCondition(
   cond: CompiledAggregateCondition,
-  context: EvalContext
+  context: EvalContext,
 ): Promise<boolean> {
   const targets = buildAggregateTargets(cond);
   if (targets.length === 0) {
-    throw new Error('Aggregate condition has no targets to evaluate');
+    throw new Error("Aggregate condition has no targets to evaluate");
   }
 
   const values: number[] = [];
@@ -146,11 +151,11 @@ async function evaluateAggregateCondition(
   for (const target of targets) {
     const expression = buildMetricExpression(
       cond.metric,
-      'current',
+      "current",
       cond.chainId,
       target.marketId,
       target.address,
-      cond.filters
+      cond.filters,
     );
     const value = await evaluateNode(expression, context);
     values.push(value);
@@ -161,8 +166,8 @@ async function evaluateAggregateCondition(
 }
 
 async function evaluateGroupCondition(
-  cond: Extract<CompiledCondition, { type: 'group' }>,
-  context: EvalContext
+  cond: Extract<CompiledCondition, { type: "group" }>,
+  context: EvalContext,
 ): Promise<boolean> {
   let triggeredCount = 0;
   const total = cond.addresses.length;
@@ -172,7 +177,12 @@ async function evaluateGroupCondition(
     const address = cond.addresses[i];
     const left = applyUserFilterToNode(cond.perAddressCondition.left, address);
     const right = applyUserFilterToNode(cond.perAddressCondition.right, address);
-    const triggered = await evaluateCondition(left, cond.perAddressCondition.operator, right, context);
+    const triggered = await evaluateCondition(
+      left,
+      cond.perAddressCondition.operator,
+      right,
+      context,
+    );
 
     if (triggered) {
       triggeredCount += 1;
@@ -186,11 +196,14 @@ async function evaluateGroupCondition(
   return triggeredCount >= required;
 }
 
-async function evaluateCompiledCondition(cond: CompiledCondition, context: EvalContext): Promise<boolean> {
+async function evaluateCompiledCondition(
+  cond: CompiledCondition,
+  context: EvalContext,
+): Promise<boolean> {
   if (isSimpleCondition(cond)) {
     return evaluateCondition(cond.left, cond.operator, cond.right, context);
   }
-  if (cond.type === 'group') {
+  if (cond.type === "group") {
     return evaluateGroupCondition(cond, context);
   }
   return evaluateAggregateCondition(cond, context);
@@ -198,14 +211,14 @@ async function evaluateCompiledCondition(cond: CompiledCondition, context: EvalC
 
 export async function evaluateConditionSet(
   conditions: CompiledCondition[],
-  logic: 'AND' | 'OR',
-  context: EvalContext
+  logic: "AND" | "OR",
+  context: EvalContext,
 ): Promise<boolean> {
   if (conditions.length === 0) {
-    throw new Error('No conditions provided for evaluation');
+    throw new Error("No conditions provided for evaluation");
   }
 
-  if (logic === 'AND') {
+  if (logic === "AND") {
     for (const condition of conditions) {
       const triggered = await evaluateCompiledCondition(condition, context);
       if (!triggered) return false;
@@ -238,7 +251,7 @@ export interface EvaluatableSignal {
   window: { duration: string };
   condition?: AstCondition;
   conditions?: CompiledCondition[];
-  logic?: 'AND' | 'OR';
+  logic?: "AND" | "OR";
   webhook_url?: string;
   cooldown_minutes?: number;
   is_active?: boolean;
@@ -277,7 +290,7 @@ export class SignalEvaluator {
       };
 
       const conditions = signal.conditions ?? (signal.condition ? [signal.condition] : []);
-      const logic = signal.logic ?? 'AND';
+      const logic = signal.logic ?? "AND";
       const triggered = await evaluateConditionSet(conditions, logic, context);
 
       return {
@@ -288,7 +301,7 @@ export class SignalEvaluator {
       };
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      logger.error({ signalId: signal.id, error }, 'Signal evaluation failed');
+      logger.error({ signalId: signal.id, error }, "Signal evaluation failed");
       return {
         signalId: signal.id,
         triggered: false,

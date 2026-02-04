@@ -1,11 +1,12 @@
-import express from 'express';
-import { SignalRepository } from '../../db/index.js';
-import { normalizeStoredDefinition } from '../../engine/compile-signal.js';
-import { simulateSignalOverTime, findFirstTrigger } from '../../engine/simulation.js';
-import { z } from 'zod';
-import { createLogger } from '../../utils/logger.js';
+import express from "express";
+import { z } from "zod";
+import { SignalRepository } from "../../db/index.js";
+import { normalizeStoredDefinition } from "../../engine/compile-signal.js";
+import { findFirstTrigger, simulateSignalOverTime } from "../../engine/simulation.js";
+import { getErrorMessage, isZodError } from "../../utils/errors.js";
+import { createLogger } from "../../utils/logger.js";
 
-const logger = createLogger('api:simulate');
+const logger = createLogger("api:simulate");
 const router: express.Router = express.Router();
 const repo = new SignalRepository();
 
@@ -22,12 +23,12 @@ const FirstTriggerSchema = z.object({
   precision_ms: z.number().int().min(60000).default(60000), // Default 1m precision
 });
 
-router.post('/:id/simulate', async (req, res) => {
+router.post("/:id/simulate", async (req, res) => {
   try {
     const { start_time, end_time, interval_ms, compact } = SimulateSchema.parse(req.body);
     const signal = await repo.getById(req.params.id);
-    
-    if (!signal) return res.status(404).json({ error: 'Signal not found' });
+
+    if (!signal) return res.status(404).json({ error: "Signal not found" });
 
     const storedDefinition = normalizeStoredDefinition(signal.definition);
     const compiled = storedDefinition.ast;
@@ -36,7 +37,7 @@ router.post('/:id/simulate', async (req, res) => {
     const endTs = new Date(end_time).getTime();
     const chainId = compiled.chains[0] || 1;
 
-    logger.info({ signalId: signal.id, start_time, end_time, interval_ms }, 'Starting simulation');
+    logger.info({ signalId: signal.id, start_time, end_time, interval_ms }, "Starting simulation");
 
     const evalSignal = {
       id: signal.id,
@@ -54,13 +55,7 @@ router.post('/:id/simulate', async (req, res) => {
       last_evaluated_at: signal.last_evaluated_at,
     };
 
-    const results = await simulateSignalOverTime(
-      evalSignal,
-      chainId,
-      startTs,
-      endTs,
-      interval_ms
-    );
+    const results = await simulateSignalOverTime(evalSignal, chainId, startTs, endTs, interval_ms);
 
     if (compact) {
       const triggeredTimestamps = results
@@ -91,22 +86,22 @@ router.post('/:id/simulate', async (req, res) => {
       signal_id: signal.id,
       range: { start_time, end_time },
       steps: triggers.length,
-      triggers
+      triggers,
     });
-
-  } catch (error: any) {
-    if (error.name === 'ZodError') return res.status(400).json({ error: 'Invalid range', details: error.errors });
-    logger.error({ error: error.message }, 'Simulation failed');
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: unknown) {
+    if (isZodError(error))
+      return res.status(400).json({ error: "Invalid range", details: error.errors });
+    logger.error({ error: getErrorMessage(error) }, "Simulation failed");
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-router.post('/:id/first-trigger', async (req, res) => {
+router.post("/:id/first-trigger", async (req, res) => {
   try {
     const { start_time, end_time, precision_ms } = FirstTriggerSchema.parse(req.body);
     const signal = await repo.getById(req.params.id);
 
-    if (!signal) return res.status(404).json({ error: 'Signal not found' });
+    if (!signal) return res.status(404).json({ error: "Signal not found" });
 
     const storedDefinition = normalizeStoredDefinition(signal.definition);
     const compiled = storedDefinition.ast;
@@ -117,7 +112,7 @@ router.post('/:id/first-trigger', async (req, res) => {
 
     logger.info(
       { signalId: signal.id, start_time, end_time, precision_ms },
-      'Finding first trigger'
+      "Finding first trigger",
     );
 
     const evalSignal = {
@@ -157,10 +152,11 @@ router.post('/:id/first-trigger', async (req, res) => {
       block_numbers: first.blockNumbers,
       execution_ms: first.executionTimeMs,
     });
-  } catch (error: any) {
-    if (error.name === 'ZodError') return res.status(400).json({ error: 'Invalid range', details: error.errors });
-    logger.error({ error: error.message }, 'First trigger search failed');
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: unknown) {
+    if (isZodError(error))
+      return res.status(400).json({ error: "Invalid range", details: error.errors });
+    logger.error({ error: getErrorMessage(error) }, "First trigger search failed");
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -1,21 +1,21 @@
 /**
  * Metric Registry - Extensible metric definitions
- * 
+ *
  * This module defines the mapping between user-facing metric names
  * and the underlying data sources. New protocols/entities can be added
  * by extending the registry.
- * 
+ *
  * Naming convention: {Protocol}.{Entity}.{field}
  */
 
-import { Filter } from '../types/index.js';
+import { Filter } from "../types/index.js";
 
 // ============================================
 // Metric Definition Types
 // ============================================
 
 export interface StateMetricDef {
-  kind: 'state';
+  kind: "state";
   /** Entity type in the indexer (e.g., "Position", "Market") */
   entity: string;
   /** Field name in the entity */
@@ -23,9 +23,9 @@ export interface StateMetricDef {
 }
 
 export interface ComputedMetricDef {
-  kind: 'computed';
+  kind: "computed";
   /** Type of computation */
-  computation: 'ratio' | 'difference';
+  computation: "ratio" | "difference";
   /** The metrics used in computation [numerator, denominator] or [left, right] */
   operands: [string, string];
   /** Human-readable description */
@@ -33,19 +33,19 @@ export interface ComputedMetricDef {
 }
 
 export interface EventMetricDef {
-  kind: 'event';
+  kind: "event";
   /** Event type in the indexer */
   eventType: string;
   /** Field to aggregate */
   field: string;
   /** Default aggregation method */
-  aggregation: 'sum' | 'count' | 'avg' | 'min' | 'max';
+  aggregation: "sum" | "count" | "avg" | "min" | "max";
 }
 
 export interface ChainedEventMetricDef {
-  kind: 'chained_event';
+  kind: "chained_event";
   /** Operation to combine events */
-  operation: 'add' | 'sub';
+  operation: "add" | "sub";
   /** The event metrics to combine [left, right] */
   operands: [string, string];
   /** Human-readable description */
@@ -62,157 +62,157 @@ export const METRIC_REGISTRY: Record<string, MetricDef> = {
   // ============================================
   // Morpho Position Metrics (State)
   // ============================================
-  'Morpho.Position.supplyShares': {
-    kind: 'state',
-    entity: 'Position',
-    field: 'supplyShares',
+  "Morpho.Position.supplyShares": {
+    kind: "state",
+    entity: "Position",
+    field: "supplyShares",
   },
-  'Morpho.Position.borrowShares': {
-    kind: 'state',
-    entity: 'Position',
-    field: 'borrowShares',
+  "Morpho.Position.borrowShares": {
+    kind: "state",
+    entity: "Position",
+    field: "borrowShares",
   },
-  'Morpho.Position.collateral': {
-    kind: 'state',
-    entity: 'Position',
-    field: 'collateral',
+  "Morpho.Position.collateral": {
+    kind: "state",
+    entity: "Position",
+    field: "collateral",
   },
 
   // ============================================
   // Morpho Market Metrics (State)
   // ============================================
-  'Morpho.Market.totalSupplyAssets': {
-    kind: 'state',
-    entity: 'Market',
-    field: 'totalSupplyAssets',
+  "Morpho.Market.totalSupplyAssets": {
+    kind: "state",
+    entity: "Market",
+    field: "totalSupplyAssets",
   },
-  'Morpho.Market.totalBorrowAssets': {
-    kind: 'state',
-    entity: 'Market',
-    field: 'totalBorrowAssets',
+  "Morpho.Market.totalBorrowAssets": {
+    kind: "state",
+    entity: "Market",
+    field: "totalBorrowAssets",
   },
-  'Morpho.Market.totalSupplyShares': {
-    kind: 'state',
-    entity: 'Market',
-    field: 'totalSupplyShares',
+  "Morpho.Market.totalSupplyShares": {
+    kind: "state",
+    entity: "Market",
+    field: "totalSupplyShares",
   },
-  'Morpho.Market.totalBorrowShares': {
-    kind: 'state',
-    entity: 'Market',
-    field: 'totalBorrowShares',
+  "Morpho.Market.totalBorrowShares": {
+    kind: "state",
+    entity: "Market",
+    field: "totalBorrowShares",
   },
-  'Morpho.Market.fee': {
-    kind: 'state',
-    entity: 'Market',
-    field: 'fee',
+  "Morpho.Market.fee": {
+    kind: "state",
+    entity: "Market",
+    field: "fee",
   },
 
   // ============================================
   // Morpho Market Metrics (Computed)
   // ============================================
-  'Morpho.Market.utilization': {
-    kind: 'computed',
-    computation: 'ratio',
-    operands: ['Morpho.Market.totalBorrowAssets', 'Morpho.Market.totalSupplyAssets'],
-    description: 'totalBorrowAssets / totalSupplyAssets',
+  "Morpho.Market.utilization": {
+    kind: "computed",
+    computation: "ratio",
+    operands: ["Morpho.Market.totalBorrowAssets", "Morpho.Market.totalSupplyAssets"],
+    description: "totalBorrowAssets / totalSupplyAssets",
   },
 
   // ============================================
   // Morpho Event Metrics (Single Event)
   // ============================================
-  'Morpho.Event.Supply.assets': {
-    kind: 'event',
-    eventType: 'Morpho_Supply',
-    field: 'assets',
-    aggregation: 'sum',
+  "Morpho.Event.Supply.assets": {
+    kind: "event",
+    eventType: "Morpho_Supply",
+    field: "assets",
+    aggregation: "sum",
   },
-  'Morpho.Event.Supply.count': {
-    kind: 'event',
-    eventType: 'Morpho_Supply',
-    field: 'id',
-    aggregation: 'count',
+  "Morpho.Event.Supply.count": {
+    kind: "event",
+    eventType: "Morpho_Supply",
+    field: "id",
+    aggregation: "count",
   },
-  'Morpho.Event.Withdraw.assets': {
-    kind: 'event',
-    eventType: 'Morpho_Withdraw',
-    field: 'assets',
-    aggregation: 'sum',
+  "Morpho.Event.Withdraw.assets": {
+    kind: "event",
+    eventType: "Morpho_Withdraw",
+    field: "assets",
+    aggregation: "sum",
   },
-  'Morpho.Event.Withdraw.count': {
-    kind: 'event',
-    eventType: 'Morpho_Withdraw',
-    field: 'id',
-    aggregation: 'count',
+  "Morpho.Event.Withdraw.count": {
+    kind: "event",
+    eventType: "Morpho_Withdraw",
+    field: "id",
+    aggregation: "count",
   },
-  'Morpho.Event.Borrow.assets': {
-    kind: 'event',
-    eventType: 'Morpho_Borrow',
-    field: 'assets',
-    aggregation: 'sum',
+  "Morpho.Event.Borrow.assets": {
+    kind: "event",
+    eventType: "Morpho_Borrow",
+    field: "assets",
+    aggregation: "sum",
   },
-  'Morpho.Event.Borrow.count': {
-    kind: 'event',
-    eventType: 'Morpho_Borrow',
-    field: 'id',
-    aggregation: 'count',
+  "Morpho.Event.Borrow.count": {
+    kind: "event",
+    eventType: "Morpho_Borrow",
+    field: "id",
+    aggregation: "count",
   },
-  'Morpho.Event.Repay.assets': {
-    kind: 'event',
-    eventType: 'Morpho_Repay',
-    field: 'assets',
-    aggregation: 'sum',
+  "Morpho.Event.Repay.assets": {
+    kind: "event",
+    eventType: "Morpho_Repay",
+    field: "assets",
+    aggregation: "sum",
   },
-  'Morpho.Event.Repay.count': {
-    kind: 'event',
-    eventType: 'Morpho_Repay',
-    field: 'id',
-    aggregation: 'count',
+  "Morpho.Event.Repay.count": {
+    kind: "event",
+    eventType: "Morpho_Repay",
+    field: "id",
+    aggregation: "count",
   },
-  'Morpho.Event.Liquidate.repaidAssets': {
-    kind: 'event',
-    eventType: 'Morpho_Liquidate',
-    field: 'repaidAssets',
-    aggregation: 'sum',
+  "Morpho.Event.Liquidate.repaidAssets": {
+    kind: "event",
+    eventType: "Morpho_Liquidate",
+    field: "repaidAssets",
+    aggregation: "sum",
   },
-  'Morpho.Event.Liquidate.repaidCount': {
-    kind: 'event',
-    eventType: 'Morpho_Liquidate',
-    field: 'id',
-    aggregation: 'count',
+  "Morpho.Event.Liquidate.repaidCount": {
+    kind: "event",
+    eventType: "Morpho_Liquidate",
+    field: "id",
+    aggregation: "count",
   },
-  'Morpho.Event.Liquidate.seizedAssets': {
-    kind: 'event',
-    eventType: 'Morpho_Liquidate',
-    field: 'seizedAssets',
-    aggregation: 'sum',
+  "Morpho.Event.Liquidate.seizedAssets": {
+    kind: "event",
+    eventType: "Morpho_Liquidate",
+    field: "seizedAssets",
+    aggregation: "sum",
   },
-  'Morpho.Event.Liquidate.seizedCount': {
-    kind: 'event',
-    eventType: 'Morpho_Liquidate',
-    field: 'id',
-    aggregation: 'count',
+  "Morpho.Event.Liquidate.seizedCount": {
+    kind: "event",
+    eventType: "Morpho_Liquidate",
+    field: "id",
+    aggregation: "count",
   },
 
   // ============================================
   // Morpho Chained Event Metrics (Computed from Events)
   // ============================================
-  'Morpho.Flow.netSupply': {
-    kind: 'chained_event',
-    operation: 'sub',
-    operands: ['Morpho.Event.Supply.assets', 'Morpho.Event.Withdraw.assets'],
-    description: 'sum(Supply.assets) - sum(Withdraw.assets)',
+  "Morpho.Flow.netSupply": {
+    kind: "chained_event",
+    operation: "sub",
+    operands: ["Morpho.Event.Supply.assets", "Morpho.Event.Withdraw.assets"],
+    description: "sum(Supply.assets) - sum(Withdraw.assets)",
   },
-  'Morpho.Flow.netBorrow': {
-    kind: 'chained_event',
-    operation: 'sub',
-    operands: ['Morpho.Event.Borrow.assets', 'Morpho.Event.Repay.assets'],
-    description: 'sum(Borrow.assets) - sum(Repay.assets)',
+  "Morpho.Flow.netBorrow": {
+    kind: "chained_event",
+    operation: "sub",
+    operands: ["Morpho.Event.Borrow.assets", "Morpho.Event.Repay.assets"],
+    description: "sum(Borrow.assets) - sum(Repay.assets)",
   },
-  'Morpho.Flow.totalLiquidations': {
-    kind: 'chained_event',
-    operation: 'add',
-    operands: ['Morpho.Event.Liquidate.repaidAssets', 'Morpho.Event.Liquidate.seizedAssets'],
-    description: 'sum(repaidAssets) + sum(seizedAssets)',
+  "Morpho.Flow.totalLiquidations": {
+    kind: "chained_event",
+    operation: "add",
+    operands: ["Morpho.Event.Liquidate.repaidAssets", "Morpho.Event.Liquidate.seizedAssets"],
+    description: "sum(repaidAssets) + sum(seizedAssets)",
   },
 };
 
@@ -240,13 +240,13 @@ export function isValidMetric(name: string): boolean {
 export function getMetricsByProtocol(protocol: string): Record<string, MetricDef> {
   const prefix = `${protocol}.`;
   const result: Record<string, MetricDef> = {};
-  
+
   for (const [name, def] of Object.entries(METRIC_REGISTRY)) {
     if (name.startsWith(prefix)) {
       result[name] = def;
     }
   }
-  
+
   return result;
 }
 
@@ -260,14 +260,14 @@ export function listMetrics(): string[] {
 /**
  * Get metrics by kind
  */
-export function getMetricsByKind(kind: MetricDef['kind']): Record<string, MetricDef> {
+export function getMetricsByKind(kind: MetricDef["kind"]): Record<string, MetricDef> {
   const result: Record<string, MetricDef> = {};
-  
+
   for (const [name, def] of Object.entries(METRIC_REGISTRY)) {
     if (def.kind === kind) {
       result[name] = def;
     }
   }
-  
+
   return result;
 }

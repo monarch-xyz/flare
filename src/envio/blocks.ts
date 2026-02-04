@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from "axios";
 
 /**
  * Chain configuration for block resolution
@@ -19,7 +19,10 @@ function getRpcEndpoints(chainId: number, fallbackEndpoints: string[]): string[]
   const envVar = process.env[`RPC_URL_${chainId}`];
   if (envVar) {
     // Split by comma and trim whitespace
-    const customEndpoints = envVar.split(',').map(url => url.trim()).filter(Boolean);
+    const customEndpoints = envVar
+      .split(",")
+      .map((url) => url.trim())
+      .filter(Boolean);
     if (customEndpoints.length > 0) {
       // Custom endpoints take priority, fallbacks as backup
       return [...customEndpoints, ...fallbackEndpoints];
@@ -35,68 +38,62 @@ function getRpcEndpoints(chainId: number, fallbackEndpoints: string[]): string[]
 const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   // === Production Chains ===
   1: {
-    name: 'Ethereum',
+    name: "Ethereum",
     rpcEndpoints: [
-      'https://eth.llamarpc.com',
-      'https://rpc.ankr.com/eth',
-      'https://ethereum.publicnode.com',
+      "https://eth.llamarpc.com",
+      "https://rpc.ankr.com/eth",
+      "https://ethereum.publicnode.com",
     ],
     genesisTimestamp: 1438269973, // July 30, 2015
     avgBlockTimeMs: 12000,
   },
   8453: {
-    name: 'Base',
+    name: "Base",
     rpcEndpoints: [
-      'https://mainnet.base.org',
-      'https://base.llamarpc.com',
-      'https://base.publicnode.com',
+      "https://mainnet.base.org",
+      "https://base.llamarpc.com",
+      "https://base.publicnode.com",
     ],
     genesisTimestamp: 1686789347, // June 15, 2023
     avgBlockTimeMs: 2000,
   },
   137: {
-    name: 'Polygon',
-    rpcEndpoints: [
-      'https://polygon-rpc.com',
-      'https://rpc.ankr.com/polygon',
-    ],
+    name: "Polygon",
+    rpcEndpoints: ["https://polygon-rpc.com", "https://rpc.ankr.com/polygon"],
     genesisTimestamp: 1590824836, // May 30, 2020
     avgBlockTimeMs: 2000,
   },
   42161: {
-    name: 'Arbitrum',
-    rpcEndpoints: [
-      'https://arb1.arbitrum.io/rpc',
-      'https://rpc.ankr.com/arbitrum',
-    ],
+    name: "Arbitrum",
+    rpcEndpoints: ["https://arb1.arbitrum.io/rpc", "https://rpc.ankr.com/arbitrum"],
     genesisTimestamp: 1622243344, // May 28, 2021
     avgBlockTimeMs: 250,
   },
-  
+
   // === Newer Chains (update RPC/genesis as needed) ===
   // Monad - High-performance EVM L1
   10143: {
-    name: 'Monad',
+    name: "Monad",
     rpcEndpoints: [
-      'https://rpc.monad.xyz', // Update with actual RPC
+      "https://rpc.monad.xyz", // Update with actual RPC
     ],
     genesisTimestamp: 1704067200, // Placeholder - Jan 1, 2024
     avgBlockTimeMs: 500, // Monad targets ~500ms blocks
   },
   // Unichain - Uniswap L2 (OP Stack)
   130: {
-    name: 'Unichain',
+    name: "Unichain",
     rpcEndpoints: [
-      'https://rpc.unichain.org', // Update with actual RPC
+      "https://rpc.unichain.org", // Update with actual RPC
     ],
     genesisTimestamp: 1704067200, // Placeholder - update when mainnet
     avgBlockTimeMs: 2000,
   },
   // Hyperliquid - Native chain
   999: {
-    name: 'Hyperliquid',
+    name: "Hyperliquid",
     rpcEndpoints: [
-      'https://rpc.hyperliquid.xyz', // Update with actual RPC
+      "https://rpc.hyperliquid.xyz", // Update with actual RPC
     ],
     genesisTimestamp: 1704067200, // Placeholder
     avgBlockTimeMs: 1000,
@@ -157,11 +154,7 @@ const blockCache = new LRUCache<string, number>(1000);
 /**
  * Make an RPC call with fallback to alternate endpoints
  */
-async function rpcCall(
-  chainId: number,
-  method: string,
-  params: unknown[]
-): Promise<unknown> {
+async function rpcCall(chainId: number, method: string, params: unknown[]): Promise<unknown> {
   const config = CHAIN_CONFIGS[chainId];
   if (!config) {
     throw new Error(`Unsupported chain: ${chainId}`);
@@ -176,19 +169,19 @@ async function rpcCall(
       const response = await axios.post(
         endpoint,
         {
-          jsonrpc: '2.0',
+          jsonrpc: "2.0",
           id: 1,
           method,
           params,
         },
         {
           timeout: 10000,
-          headers: { 'Content-Type': 'application/json' },
-        }
+          headers: { "Content-Type": "application/json" },
+        },
       );
 
       if (response.data.error) {
-        throw new Error(response.data.error.message || 'RPC error');
+        throw new Error(response.data.error.message || "RPC error");
       }
 
       return response.data.result;
@@ -198,7 +191,7 @@ async function rpcCall(
     }
   }
 
-  throw lastError || new Error('All RPC endpoints failed');
+  throw lastError || new Error("All RPC endpoints failed");
 }
 
 /**
@@ -206,23 +199,22 @@ async function rpcCall(
  */
 async function getBlock(
   chainId: number,
-  blockNumber: number | 'latest'
+  blockNumber: number | "latest",
 ): Promise<{ number: number; timestamp: number }> {
-  const blockParam =
-    blockNumber === 'latest' ? 'latest' : `0x${blockNumber.toString(16)}`;
+  const blockParam = blockNumber === "latest" ? "latest" : `0x${blockNumber.toString(16)}`;
 
-  const result = (await rpcCall(chainId, 'eth_getBlockByNumber', [
-    blockParam,
-    false,
-  ])) as { number: string; timestamp: string } | null;
+  const result = (await rpcCall(chainId, "eth_getBlockByNumber", [blockParam, false])) as {
+    number: string;
+    timestamp: string;
+  } | null;
 
   if (!result) {
     throw new Error(`Block not found: ${blockNumber}`);
   }
 
   return {
-    number: parseInt(result.number, 16),
-    timestamp: parseInt(result.timestamp, 16),
+    number: Number.parseInt(result.number, 16),
+    timestamp: Number.parseInt(result.timestamp, 16),
   };
 }
 
@@ -230,7 +222,7 @@ async function getBlock(
  * Estimate block number from timestamp by working BACKWARDS from latest block.
  * This is more accurate because block times can change over a chain's lifetime
  * (e.g., Ethereum pre/post-merge went from ~13s to ~12s).
- * 
+ *
  * @param latestBlock - The current latest block (number + timestamp)
  * @param targetTimestampSec - The target timestamp to find
  * @param avgBlockTimeMs - Average block time in milliseconds
@@ -238,20 +230,20 @@ async function getBlock(
 function estimateBlockFromLatest(
   latestBlock: { number: number; timestamp: number },
   targetTimestampSec: number,
-  avgBlockTimeMs: number
+  avgBlockTimeMs: number,
 ): number {
   // Calculate time difference from latest block (going backwards)
   const timeDiffSec = latestBlock.timestamp - targetTimestampSec;
-  
+
   if (timeDiffSec <= 0) {
     // Target is at or after latest block
     return latestBlock.number;
   }
-  
+
   // Estimate how many blocks back we need to go
   const blocksBack = Math.floor((timeDiffSec * 1000) / avgBlockTimeMs);
   const estimatedBlock = latestBlock.number - blocksBack;
-  
+
   // Don't go below 0
   return Math.max(0, estimatedBlock);
 }
@@ -274,7 +266,7 @@ function estimateBlockNumber(chainId: number, timestampSec: number): number {
 
 /**
  * Binary search to find the first block with timestamp >= target.
- * 
+ *
  * NOTE: For fast chains with blocktime < 1s (e.g., Arbitrum at 0.25s),
  * multiple blocks may share the same timestamp. This function returns
  * ONE of those blocks, not necessarily the first or last.
@@ -282,7 +274,7 @@ function estimateBlockNumber(chainId: number, timestampSec: number): number {
 async function binarySearchBlock(
   chainId: number,
   targetTimestampSec: number,
-  latestBlock: { number: number; timestamp: number }
+  latestBlock: { number: number; timestamp: number },
 ): Promise<number> {
   const config = CHAIN_CONFIGS[chainId];
   if (!config) {
@@ -303,11 +295,7 @@ async function binarySearchBlock(
   // This is more accurate as block times can change over chain lifetime
   let low = 0;
   let high = latestBlock.number;
-  const estimate = estimateBlockFromLatest(
-    latestBlock,
-    targetTimestampSec,
-    config.avgBlockTimeMs
-  );
+  const estimate = estimateBlockFromLatest(latestBlock, targetTimestampSec, config.avgBlockTimeMs);
 
   // Use estimate as starting point for binary search bounds
   const block = await getBlock(chainId, estimate);
@@ -354,7 +342,7 @@ async function binarySearchBlock(
  */
 export async function resolveBlockByTimestamp(
   chainId: number,
-  timestampMs: number
+  timestampMs: number,
 ): Promise<number> {
   const timestampSec = Math.floor(timestampMs / 1000);
   const cacheKey = `${chainId}:${timestampSec}`;
@@ -381,7 +369,7 @@ export async function resolveBlockByTimestamp(
 
   try {
     // Get latest block to establish upper bound
-    const latestBlock = await getBlock(chainId, 'latest');
+    const latestBlock = await getBlock(chainId, "latest");
 
     // Handle edge case: timestamp in the future
     if (timestampSec >= latestBlock.timestamp) {
@@ -390,11 +378,7 @@ export async function resolveBlockByTimestamp(
     }
 
     // Perform binary search
-    const blockNumber = await binarySearchBlock(
-      chainId,
-      timestampSec,
-      latestBlock
-    );
+    const blockNumber = await binarySearchBlock(chainId, timestampSec, latestBlock);
 
     // Cache the result
     blockCache.set(cacheKey, blockNumber);

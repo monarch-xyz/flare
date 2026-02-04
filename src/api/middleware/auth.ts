@@ -1,10 +1,10 @@
-import type { Request, Response, NextFunction } from 'express';
-import { config } from '../../config/index.js';
+import type { NextFunction, Request, Response } from "express";
+import { config } from "../../config/index.js";
 
-const UNAUTHORIZED_RESPONSE = { error: 'Unauthorized' };
+const UNAUTHORIZED_RESPONSE = { error: "Unauthorized" };
 
 export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  if (req.path === '/health') {
+  if (req.path === "/health") {
     return next();
   }
 
@@ -12,7 +12,7 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
     return next();
   }
 
-  const apiKey = req.header('x-api-key');
+  const apiKey = req.header("x-api-key");
   if (!apiKey || apiKey !== config.api.apiKey) {
     return res.status(401).json(UNAUTHORIZED_RESPONSE);
   }

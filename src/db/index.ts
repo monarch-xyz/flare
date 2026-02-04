@@ -1,9 +1,10 @@
-import pg from 'pg';
-import { config } from '../config/index.js';
-import { schema } from './schema.js';
-import { createLogger } from '../utils/logger.js';
+import pg from "pg";
+import { config } from "../config/index.js";
+import { getErrorMessage } from "../utils/errors.js";
+import { createLogger } from "../utils/logger.js";
+import { schema } from "./schema.js";
 
-const logger = createLogger('db');
+const logger = createLogger("db");
 const { Pool } = pg;
 
 export const pool = new Pool({
@@ -13,23 +14,42 @@ export const pool = new Pool({
 export async function initDb() {
   try {
     await pool.query(schema);
-    logger.info('Database initialized successfully');
-  } catch (error: any) {
-    logger.error({ error: error.message }, 'Database initialization failed');
+    logger.info("Database initialized successfully");
+  } catch (error: unknown) {
+    logger.error({ error: getErrorMessage(error) }, "Database initialization failed");
     throw error;
   }
 }
 
 export async function closeDb() {
   await pool.end();
-  logger.info('Database connection closed');
+  logger.info("Database connection closed");
 }
 
 // ============================================================================
 // SIGNAL REPOSITORY
 // ============================================================================
+
+interface CreateSignalInput {
+  name: string;
+  description?: string;
+  definition: unknown;
+  webhook_url: string;
+  cooldown_minutes?: number;
+}
+
+interface UpdateSignalInput {
+  name?: string;
+  description?: string;
+  definition?: unknown;
+  webhook_url?: string;
+  cooldown_minutes?: number;
+  is_active?: boolean;
+  [key: string]: unknown;
+}
+
 export class SignalRepository {
-  async create(signal: any) {
+  async create(signal: CreateSignalInput) {
     const query = `
       INSERT INTO signals (name, description, definition, webhook_url, cooldown_minutes)
       VALUES ($1, $2, $3, $4, $5)
@@ -47,23 +67,25 @@ export class SignalRepository {
   }
 
   async list(activeOnly = false) {
-    const query = activeOnly 
-      ? 'SELECT * FROM signals WHERE is_active = true ORDER BY created_at DESC'
-      : 'SELECT * FROM signals ORDER BY created_at DESC';
+    const query = activeOnly
+      ? "SELECT * FROM signals WHERE is_active = true ORDER BY created_at DESC"
+      : "SELECT * FROM signals ORDER BY created_at DESC";
     const { rows } = await pool.query(query);
     return rows;
   }
 
   async getById(id: string) {
-    const { rows } = await pool.query('SELECT * FROM signals WHERE id = $1', [id]);
+    const { rows } = await pool.query("SELECT * FROM signals WHERE id = $1", [id]);
     return rows[0];
   }
 
-  async update(id: string, updates: any) {
+  async update(id: string, updates: UpdateSignalInput) {
     const fields = Object.keys(updates);
-    const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(', ');
-    const values = fields.map(f => f === 'definition' ? JSON.stringify(updates[f]) : updates[f]);
-    
+    const setClause = fields.map((f, i) => `${f} = $${i + 2}`).join(", ");
+    const values = fields.map((f) =>
+      f === "definition" ? JSON.stringify(updates[f]) : updates[f],
+    );
+
     const query = `
       UPDATE signals 
       SET ${setClause}, updated_at = NOW() 
@@ -75,17 +97,17 @@ export class SignalRepository {
   }
 
   async delete(id: string) {
-    await pool.query('DELETE FROM signals WHERE id = $1', [id]);
+    await pool.query("DELETE FROM signals WHERE id = $1", [id]);
     return { deleted: true, id };
   }
 
   async updateEvaluatedAt(id: string) {
-    const query = `UPDATE signals SET last_evaluated_at = NOW() WHERE id = $1`;
+    const query = "UPDATE signals SET last_evaluated_at = NOW() WHERE id = $1";
     await pool.query(query, [id]);
   }
 
   async updateTriggeredAt(id: string) {
-    const query = `UPDATE signals SET last_triggered_at = NOW() WHERE id = $1`;
+    const query = "UPDATE signals SET last_triggered_at = NOW() WHERE id = $1";
     await pool.query(query, [id]);
   }
 
@@ -158,7 +180,12 @@ export class NotificationLogRepository {
     return rows;
   }
 
-  async updateDeliveryStatus(id: string, status: number, errorMessage?: string, durationMs?: number) {
+  async updateDeliveryStatus(
+    id: string,
+    status: number,
+    errorMessage?: string,
+    durationMs?: number,
+  ) {
     const query = `
       UPDATE notification_log 
       SET webhook_status = $2, 
@@ -241,7 +268,7 @@ export class SnapshotBlocksRepository {
   async bulkUpsert(snapshots: SnapshotBlock[]) {
     if (snapshots.length === 0) return [];
 
-    const values: any[] = [];
+    const values: (number | bigint | Date)[] = [];
     const placeholders = snapshots.map((s, i) => {
       const base = i * 4;
       values.push(s.chain_id, s.target_timestamp, s.block_number, s.block_timestamp);
@@ -250,7 +277,7 @@ export class SnapshotBlocksRepository {
 
     const query = `
       INSERT INTO snapshot_blocks (chain_id, target_timestamp, block_number, block_timestamp)
-      VALUES ${placeholders.join(', ')}
+      VALUES ${placeholders.join(", ")}
       ON CONFLICT (chain_id, target_timestamp) 
       DO UPDATE SET 
         block_number = EXCLUDED.block_number,
@@ -322,11 +349,11 @@ export class EvaluationCacheRepository {
   }
 
   async delete(cacheKey: string) {
-    await pool.query('DELETE FROM evaluation_cache WHERE cache_key = $1', [cacheKey]);
+    await pool.query("DELETE FROM evaluation_cache WHERE cache_key = $1", [cacheKey]);
   }
 
   async cleanup() {
-    const { rows } = await pool.query('SELECT cleanup_expired_cache() as deleted_count');
+    const { rows } = await pool.query("SELECT cleanup_expired_cache() as deleted_count");
     return rows[0]?.deleted_count || 0;
   }
 }

@@ -1,4 +1,4 @@
-import { pino, type Logger as PinoLogger } from 'pino';
+import { type Logger as PinoLogger, pino } from "pino";
 
 export interface Logger {
   info: (...args: unknown[]) => void;
@@ -9,7 +9,7 @@ export interface Logger {
 }
 
 const baseLogger = pino({
-  level: process.env.LOG_LEVEL ?? 'info',
+  level: process.env.LOG_LEVEL ?? "info",
 });
 
 function createPinoLogger(resolvedName?: string): PinoLogger {
@@ -23,7 +23,11 @@ function wrapLogger(pinoLogger: PinoLogger, resolvedName?: string): Logger {
     error: (...args) => (pinoLogger.error as (...args: unknown[]) => void)(...args),
     debug: (...args) => (pinoLogger.debug as (...args: unknown[]) => void)(...args),
     child: (bindings) => {
-      const childName = bindings?.name ? (resolvedName ? `${resolvedName}:${bindings.name}` : bindings.name) : resolvedName;
+      const childName = bindings?.name
+        ? resolvedName
+          ? `${resolvedName}:${bindings.name}`
+          : bindings.name
+        : resolvedName;
       const childLogger = pinoLogger.child(childName ? { name: childName } : {});
       return wrapLogger(childLogger, childName);
     },
@@ -31,6 +35,6 @@ function wrapLogger(pinoLogger: PinoLogger, resolvedName?: string): Logger {
 }
 
 export function createLogger(name?: string | { name?: string }): Logger {
-  const resolvedName = typeof name === 'string' ? name : name?.name;
+  const resolvedName = typeof name === "string" ? name : name?.name;
   return wrapLogger(createPinoLogger(resolvedName), resolvedName);
 }

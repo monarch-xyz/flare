@@ -3,18 +3,18 @@
  * Validates signal definitions before they're persisted.
  */
 
-import { ExpressionNode, Condition } from '../types/index.js';
-import { isValidDuration } from './duration.js';
+import type { Condition, ExpressionNode } from "../types/index.js";
+import { isValidDuration } from "./duration.js";
 
 const MAX_EXPRESSION_DEPTH = 20;
 
 export class ValidationError extends Error {
   constructor(
     message: string,
-    public readonly field?: string
+    public readonly field?: string,
   ) {
     super(message);
-    this.name = 'ValidationError';
+    this.name = "ValidationError";
   }
 }
 
@@ -25,16 +25,16 @@ export class ValidationError extends Error {
 export function validateExpressionDepth(
   node: ExpressionNode,
   currentDepth = 0,
-  maxDepth = MAX_EXPRESSION_DEPTH
+  maxDepth = MAX_EXPRESSION_DEPTH,
 ): void {
   if (currentDepth > maxDepth) {
     throw new ValidationError(
       `Expression tree exceeds maximum depth of ${maxDepth}. Simplify your condition.`,
-      'condition'
+      "condition",
     );
   }
 
-  if (node.type === 'expression') {
+  if (node.type === "expression") {
     validateExpressionDepth(node.left, currentDepth + 1, maxDepth);
     validateExpressionDepth(node.right, currentDepth + 1, maxDepth);
   }
@@ -51,11 +51,11 @@ export function validateCondition(condition: Condition): void {
 /**
  * Validates a duration string format.
  */
-export function validateDuration(duration: string, field = 'duration'): void {
+export function validateDuration(duration: string, field = "duration"): void {
   if (!isValidDuration(duration)) {
     throw new ValidationError(
       `Invalid duration format: "${duration}". Expected format: {number}{unit} where unit is s|m|h|d|w`,
-      field
+      field,
     );
   }
 }
@@ -66,18 +66,12 @@ export function validateDuration(duration: string, field = 'duration'): void {
 export function validateWebhookUrl(url: string): void {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-      throw new ValidationError(
-        'Webhook URL must use http or https protocol',
-        'webhook_url'
-      );
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      throw new ValidationError("Webhook URL must use http or https protocol", "webhook_url");
     }
   } catch (e) {
     if (e instanceof ValidationError) throw e;
-    throw new ValidationError(
-      `Invalid webhook URL: "${url}"`,
-      'webhook_url'
-    );
+    throw new ValidationError(`Invalid webhook URL: "${url}"`, "webhook_url");
   }
 }
 
@@ -86,17 +80,14 @@ export function validateWebhookUrl(url: string): void {
  */
 export function validateChains(chains: number[]): void {
   if (!chains || chains.length === 0) {
-    throw new ValidationError(
-      'At least one chain ID is required',
-      'chains'
-    );
+    throw new ValidationError("At least one chain ID is required", "chains");
   }
 
   for (const chainId of chains) {
     if (!Number.isInteger(chainId) || chainId <= 0) {
       throw new ValidationError(
         `Invalid chain ID: ${chainId}. Must be a positive integer.`,
-        'chains'
+        "chains",
       );
     }
   }
@@ -114,7 +105,7 @@ export interface SignalValidationInput {
 
 export function validateSignal(signal: SignalValidationInput): void {
   validateChains(signal.chains);
-  validateDuration(signal.window.duration, 'window.duration');
+  validateDuration(signal.window.duration, "window.duration");
   validateCondition(signal.condition);
   validateWebhookUrl(signal.webhook_url);
 }

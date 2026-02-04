@@ -6,7 +6,7 @@
  * actual data fetching logic.
  */
 
-import { StateRef, EventRef } from '../types/index.js';
+import type { EventRef, StateRef } from "../types/index.js";
 
 /**
  * Interface for fetching state and event data

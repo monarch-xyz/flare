@@ -14,7 +14,7 @@ export interface SignalScope {
   /** Addresses to track (optional) */
   addresses?: string[];
   /** Protocol filter */
-  protocol?: 'morpho' | 'all';
+  protocol?: "morpho" | "all";
 }
 
 // ============================================
@@ -34,7 +34,7 @@ export interface TimeWindow {
 
 /**
  * Metric names follow the pattern: {Protocol}.{Entity}.{field}
- * 
+ *
  * Available metrics (see src/engine/metrics.ts for full list):
  * - Morpho.Position.supplyShares
  * - Morpho.Position.borrowShares
@@ -53,15 +53,19 @@ export type MetricType = string;
 // Conditions
 // ============================================
 
-export type ComparisonOperator = '>' | '<' | '>=' | '<=' | '==' | '!=';
+export type ComparisonOperator = ">" | "<" | ">=" | "<=" | "==" | "!=";
 
 export interface ThresholdCondition {
-  type: 'threshold';
+  type: "threshold";
   metric: MetricType;
   operator: ComparisonOperator;
   value: number;
   /** Optional event-only filters (for event metrics) */
-  filters?: Array<{ field: string; op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains'; value: string | number | boolean | Array<string | number> }>;
+  filters?: Array<{
+    field: string;
+    op: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "contains";
+    value: string | number | boolean | Array<string | number>;
+  }>;
   /** Chain ID (required) */
   chain_id: number;
   /** Market ID (required for Market/Position metrics) */
@@ -71,9 +75,9 @@ export interface ThresholdCondition {
 }
 
 export interface ChangeCondition {
-  type: 'change';
+  type: "change";
   metric: MetricType;
-  direction: 'increase' | 'decrease' | 'any';
+  direction: "increase" | "decrease" | "any";
   by: { percent: number } | { absolute: number };
   /** Chain ID (required) */
   chain_id: number;
@@ -84,7 +88,7 @@ export interface ChangeCondition {
 }
 
 export interface GroupCondition {
-  type: 'group';
+  type: "group";
   /** Addresses to check */
   addresses: string[];
   /** N of M requirement */
@@ -97,24 +101,24 @@ export interface GroupCondition {
 }
 
 export interface AggregateCondition {
-  type: 'aggregate';
-  aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count';
+  type: "aggregate";
+  aggregation: "sum" | "avg" | "min" | "max" | "count";
   metric: MetricType;
   operator: ComparisonOperator;
   value: number;
   /** Optional event-only filters (for event metrics) */
-  filters?: Array<{ field: string; op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'contains'; value: string | number | boolean | Array<string | number> }>;
+  filters?: Array<{
+    field: string;
+    op: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "in" | "contains";
+    value: string | number | boolean | Array<string | number>;
+  }>;
   /** Chain ID (required) */
   chain_id: number;
   /** Market ID (optional for aggregation) */
   market_id?: string;
 }
 
-export type Condition =
-  | ThresholdCondition
-  | ChangeCondition
-  | GroupCondition
-  | AggregateCondition;
+export type Condition = ThresholdCondition | ChangeCondition | GroupCondition | AggregateCondition;
 
 // ============================================
 // Signal Definition
@@ -124,7 +128,7 @@ export interface SignalDefinition {
   scope: SignalScope;
   conditions: Condition[];
   /** How conditions combine (default: AND) */
-  logic?: 'AND' | 'OR';
+  logic?: "AND" | "OR";
   window: TimeWindow;
 }
 

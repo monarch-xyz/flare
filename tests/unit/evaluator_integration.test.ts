@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SignalEvaluator, SignalEvaluationResult } from '../../src/engine/condition.js';
-import { EnvioClient } from '../../src/envio/client.js';
-import { Signal } from '../../src/types/index.js';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SignalEvaluationResult, SignalEvaluator } from "../../src/engine/condition.js";
+import { EnvioClient } from "../../src/envio/client.js";
+import type { Signal } from "../../src/types/index.js";
 
 // Mock EnvioClient
-vi.mock('../../src/envio/client.js', () => {
+vi.mock("../../src/envio/client.js", () => {
   return {
     EnvioClient: vi.fn().mockImplementation(() => ({
       fetchState: vi.fn(),
@@ -14,13 +14,13 @@ vi.mock('../../src/envio/client.js', () => {
 });
 
 // Mock block resolver to avoid real network calls
-vi.mock('../../src/envio/blocks.js', () => {
+vi.mock("../../src/envio/blocks.js", () => {
   return {
     resolveBlockByTimestamp: vi.fn().mockResolvedValue(19000000), // Mock block number
   };
 });
 
-describe('SignalEvaluator Integration', () => {
+describe("SignalEvaluator Integration", () => {
   let evaluator: SignalEvaluator;
   let mockEnvio: any;
 
@@ -29,50 +29,50 @@ describe('SignalEvaluator Integration', () => {
     evaluator = new SignalEvaluator(mockEnvio);
   });
 
-  it('correctly evaluates a complex signal (net supply change)', async () => {
+  it("correctly evaluates a complex signal (net supply change)", async () => {
     // Scenario: Net supply (Supply - Withdraw) < 20% of window_start position
     const signal: Signal = {
-      id: 'test-signal',
-      name: 'Net Supply Drop',
+      id: "test-signal",
+      name: "Net Supply Drop",
       chains: [1],
-      window: { duration: '1h' },
-      webhook_url: 'https://mock.com',
+      window: { duration: "1h" },
+      webhook_url: "https://mock.com",
       cooldown_minutes: 5,
       is_active: true,
       condition: {
-        type: 'condition',
-        operator: 'lt',
+        type: "condition",
+        operator: "lt",
         left: {
-          type: 'expression',
-          operator: 'sub',
+          type: "expression",
+          operator: "sub",
           left: {
-            type: 'event',
-            event_type: 'Supply',
-            filters: [{ field: 'user', op: 'eq', value: '0x123' }],
-            field: 'assets',
-            aggregation: 'sum'
+            type: "event",
+            event_type: "Supply",
+            filters: [{ field: "user", op: "eq", value: "0x123" }],
+            field: "assets",
+            aggregation: "sum",
           },
           right: {
-            type: 'event',
-            event_type: 'Withdraw',
-            filters: [{ field: 'user', op: 'eq', value: '0x123' }],
-            field: 'assets',
-            aggregation: 'sum'
-          }
+            type: "event",
+            event_type: "Withdraw",
+            filters: [{ field: "user", op: "eq", value: "0x123" }],
+            field: "assets",
+            aggregation: "sum",
+          },
         },
         right: {
-          type: 'expression',
-          operator: 'mul',
-          left: { type: 'constant', value: 0.2 },
+          type: "expression",
+          operator: "mul",
+          left: { type: "constant", value: 0.2 },
           right: {
-            type: 'state',
-            entity_type: 'Position',
-            filters: [{ field: 'user', op: 'eq', value: '0x123' }],
-            field: 'supplyShares',
-            snapshot: 'window_start'
-          }
-        }
-      }
+            type: "state",
+            entity_type: "Position",
+            filters: [{ field: "user", op: "eq", value: "0x123" }],
+            field: "supplyShares",
+            snapshot: "window_start",
+          },
+        },
+      },
     };
 
     // Setup Mock Data
@@ -82,28 +82,28 @@ describe('SignalEvaluator Integration', () => {
     // Condition: 150 < (0.2 * 1000) => 150 < 200 => TRUE
     mockEnvio.fetchEvents
       .mockResolvedValueOnce(200) // Supply
-      .mockResolvedValueOnce(50);  // Withdraw
+      .mockResolvedValueOnce(50); // Withdraw
 
     const result = await evaluator.evaluate(signal);
     expect(result.triggered).toBe(true);
     expect(mockEnvio.fetchState).toHaveBeenCalledWith(expect.anything(), expect.any(Number));
   });
 
-  it('returns false when condition is not met', async () => {
+  it("returns false when condition is not met", async () => {
     const signal: Signal = {
-      id: 'test-fail',
-      name: 'Utilization Alert',
+      id: "test-fail",
+      name: "Utilization Alert",
       chains: [1],
-      window: { duration: '1h' },
-      webhook_url: 'https://mock.com',
+      window: { duration: "1h" },
+      webhook_url: "https://mock.com",
       cooldown_minutes: 5,
       is_active: true,
       condition: {
-        type: 'condition',
-        operator: 'gt',
-        left: { type: 'constant', value: 50 },
-        right: { type: 'constant', value: 100 }
-      }
+        type: "condition",
+        operator: "gt",
+        left: { type: "constant", value: 50 },
+        right: { type: "constant", value: 100 },
+      },
     };
 
     const result = await evaluator.evaluate(signal);

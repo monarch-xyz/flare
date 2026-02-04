@@ -1,55 +1,55 @@
-import { ComparisonOp, Condition as AstCondition } from '../types/index.js';
-import { EvalContext, evaluateNode, parseDuration } from './evaluator.js';
-import { evaluateConditionSet } from './condition.js';
-import { isSimpleCondition, type CompiledCondition } from './compiler.js';
-import { EnvioClient } from '../envio/client.js';
-import { resolveBlockByTimestamp } from '../envio/blocks.js';
-import { createMorphoFetcher } from './morpho-fetcher.js';
-import type { DataFetcher } from './fetcher.js';
-import type { EvaluatableSignal } from './condition.js';
+import { resolveBlockByTimestamp } from "../envio/blocks.js";
+import { EnvioClient } from "../envio/client.js";
+import type { Condition as AstCondition, ComparisonOp } from "../types/index.js";
+import { type CompiledCondition, isSimpleCondition } from "./compiler.js";
+import { evaluateConditionSet } from "./condition.js";
+import type { EvaluatableSignal } from "./condition.js";
+import { type EvalContext, evaluateNode, parseDuration } from "./evaluator.js";
+import type { DataFetcher } from "./fetcher.js";
+import { createMorphoFetcher } from "./morpho-fetcher.js";
 
 export interface SimulationRequest {
   signal: EvaluatableSignal; // The signal to simulate
-  atTimestamp: number;      // Unix timestamp (ms) to simulate at
-  chainId: number;          // Which chain to evaluate on
-  fetcher?: DataFetcher;    // Optional: reuse a fetcher across simulations
+  atTimestamp: number; // Unix timestamp (ms) to simulate at
+  chainId: number; // Which chain to evaluate on
+  fetcher?: DataFetcher; // Optional: reuse a fetcher across simulations
 }
 
 export interface SimulationResult {
-  triggered: boolean;       // Did condition evaluate to true?
-  leftValue?: number;        // Evaluated left side of condition (single condition only)
-  rightValue?: number;       // Evaluated right side of condition (single condition only)
-  operator?: ComparisonOp;   // The comparison operator (single condition only)
-  evaluatedAt: number;      // The timestamp used for evaluation
-  windowStart: number;      // The calculated window start
+  triggered: boolean; // Did condition evaluate to true?
+  leftValue?: number; // Evaluated left side of condition (single condition only)
+  rightValue?: number; // Evaluated right side of condition (single condition only)
+  operator?: ComparisonOp; // The comparison operator (single condition only)
+  evaluatedAt: number; // The timestamp used for evaluation
+  windowStart: number; // The calculated window start
   blockNumbers: {
-    current: number;        // Block number for "current" state queries
-    windowStart: number;    // Block number for "window_start" state queries
+    current: number; // Block number for "current" state queries
+    windowStart: number; // Block number for "window_start" state queries
   };
-  executionTimeMs: number;  // How long evaluation took
+  executionTimeMs: number; // How long evaluation took
 }
 
 /**
  * Simulate a signal at a specific historical timestamp.
- * 
+ *
  * This allows testing and debugging signals by evaluating them
  * as if we were at a specific point in time.
  */
 export async function simulateSignal(req: SimulationRequest): Promise<SimulationResult> {
   const startTime = Date.now();
-  
+
   const { signal, atTimestamp, chainId, fetcher } = req;
-  
+
   // Calculate window timing
   const windowDurationMs = parseDuration(signal.window.duration);
   const windowStart = atTimestamp - windowDurationMs;
-  
+
   // Resolve block numbers for both timestamps
   const [currentBlock, windowStartBlock] = await Promise.all([
     resolveBlockByTimestamp(chainId, atTimestamp),
     resolveBlockByTimestamp(chainId, windowStart),
   ]);
-  
+
   // Create Envio client (for events) and morpho fetcher (for state)
   const dataFetcher = fetcher ?? createMorphoFetcher(new EnvioClient(), { chainId });
 
@@ -72,9 +72,9 @@ export async function simulateSignal(req: SimulationRequest): Promise<Simulation
       return dataFetcher.fetchEvents(ref, start, end);
     },
   };
-  
+
   const conditions = signal.conditions ?? (signal.condition ? [signal.condition] : []);
-  const logic = signal.logic ?? 'AND';
+  const logic = signal.logic ?? "AND";
 
   let leftValue: number | undefined;
   let rightValue: number | undefined;
@@ -90,9 +90,9 @@ export async function simulateSignal(req: SimulationRequest): Promise<Simulation
   }
 
   const triggered = await evaluateConditionSet(conditions as CompiledCondition[], logic, context);
-  
+
   const executionTimeMs = Date.now() - startTime;
-  
+
   return {
     triggered,
     leftValue,
@@ -117,16 +117,16 @@ export async function simulateSignalOverTime(
   chainId: number,
   startTimestamp: number,
   endTimestamp: number,
-  stepMs: number = 3600000 // default 1 hour
+  stepMs = 3600000, // default 1 hour
 ): Promise<SimulationResult[]> {
   const results: SimulationResult[] = [];
   const fetcher = createMorphoFetcher(new EnvioClient(), { chainId });
-  
+
   for (let ts = startTimestamp; ts <= endTimestamp; ts += stepMs) {
     const result = await simulateSignal({ signal, atTimestamp: ts, chainId, fetcher });
     results.push(result);
   }
-  
+
   return results;
 }
 
@@ -139,7 +139,7 @@ export async function findFirstTrigger(
   chainId: number,
   startTimestamp: number,
   endTimestamp: number,
-  precisionMs: number = 60000 // default 1 minute
+  precisionMs = 60000, // default 1 minute
 ): Promise<SimulationResult | null> {
   const fetcher = createMorphoFetcher(new EnvioClient(), { chainId });
   // First check if end triggers - if not, no trigger in range
@@ -147,28 +147,33 @@ export async function findFirstTrigger(
   if (!endResult.triggered) {
     return null;
   }
-  
+
   // Check if start triggers
-  const startResult = await simulateSignal({ signal, atTimestamp: startTimestamp, chainId, fetcher });
+  const startResult = await simulateSignal({
+    signal,
+    atTimestamp: startTimestamp,
+    chainId,
+    fetcher,
+  });
   if (startResult.triggered) {
     return startResult;
   }
-  
+
   // Binary search for the transition point
   let low = startTimestamp;
   let high = endTimestamp;
-  
+
   while (high - low > precisionMs) {
     const mid = Math.floor((low + high) / 2);
     const midResult = await simulateSignal({ signal, atTimestamp: mid, chainId, fetcher });
-    
+
     if (midResult.triggered) {
       high = mid;
     } else {
       low = mid;
     }
   }
-  
+
   // Return the result at high (first triggered point)
   return simulateSignal({ signal, atTimestamp: high, chainId, fetcher });
 }

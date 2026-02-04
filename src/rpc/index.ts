@@ -14,6 +14,6 @@ export {
   clearClientCache,
   isChainSupportedForRpc,
   RpcQueryError,
-} from './client.js';
+} from "./client.js";
 
-export { morphoAbi, MORPHO_ADDRESSES, type PositionResult, type MarketResult } from './abi.js';
+export { morphoAbi, MORPHO_ADDRESSES, type PositionResult, type MarketResult } from "./abi.js";

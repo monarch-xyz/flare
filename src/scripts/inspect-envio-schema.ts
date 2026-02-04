@@ -6,16 +6,16 @@
  *   ENVIO_TYPE=Morpho_Supply npx tsx src/scripts/inspect-envio-schema.ts
  */
 
-import 'dotenv/config';
-import { GraphQLClient } from 'graphql-request';
+import "dotenv/config";
+import { GraphQLClient } from "graphql-request";
 
 const endpoint = process.env.ENVIO_ENDPOINT;
 if (!endpoint) {
-  console.error('ENVIO_ENDPOINT is required');
+  console.error("ENVIO_ENDPOINT is required");
   process.exit(1);
 }
 
-const eventType = process.env.ENVIO_TYPE ?? 'Morpho_Supply';
+const eventType = process.env.ENVIO_TYPE ?? "Morpho_Supply";
 const boolExpType = `${eventType}_bool_exp`;
 
 const client = new GraphQLClient(endpoint);
@@ -67,10 +67,10 @@ const objectQuery = `
 `;
 
 function flattenType(type: any): string {
-  if (!type) return '';
-  if (type.kind === 'NON_NULL') return `${flattenType(type.ofType)}!`;
-  if (type.kind === 'LIST') return `[${flattenType(type.ofType)}]`;
-  return type.name ?? '';
+  if (!type) return "";
+  if (type.kind === "NON_NULL") return `${flattenType(type.ofType)}!`;
+  if (type.kind === "LIST") return `[${flattenType(type.ofType)}]`;
+  return type.name ?? "";
 }
 
 async function main() {
@@ -92,6 +92,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error('Schema introspection failed:', error);
+  console.error("Schema introspection failed:", error);
   process.exit(1);
 });

@@ -6,32 +6,32 @@
  * - Events: Envio GraphQL (events have timestamps, no time-travel needed)
  */
 
-import { StateRef, EventRef } from '../types/index.js';
-import { EnvioClient } from '../envio/client.js';
-import { resolveBlockByTimestamp } from '../envio/blocks.js';
+import { resolveBlockByTimestamp } from "../envio/blocks.js";
+import type { EnvioClient } from "../envio/client.js";
 import {
-  readPosition,
-  readMarket,
-  readPositionAtBlock,
-  readMarketAtBlock,
-  type PositionResult,
   type MarketResult,
-} from '../rpc/index.js';
-import type { DataFetcher, DataFetcherOptions } from './fetcher.js';
-import { createLogger } from '../utils/logger.js';
+  type PositionResult,
+  readMarket,
+  readMarketAtBlock,
+  readPosition,
+  readPositionAtBlock,
+} from "../rpc/index.js";
+import type { EventRef, StateRef } from "../types/index.js";
+import { createLogger } from "../utils/logger.js";
+import type { DataFetcher, DataFetcherOptions } from "./fetcher.js";
 
-const logger = createLogger('morpho-fetcher');
+const logger = createLogger("morpho-fetcher");
 
 /**
  * Extract a field value from RPC Position result
  */
 function extractPositionField(result: PositionResult, field: string): number {
   switch (field) {
-    case 'supplyShares':
+    case "supplyShares":
       return Number(result.supplyShares);
-    case 'borrowShares':
+    case "borrowShares":
       return Number(result.borrowShares);
-    case 'collateral':
+    case "collateral":
       return Number(result.collateral);
     default:
       throw new Error(`Unknown Position field: ${field}`);
@@ -43,17 +43,17 @@ function extractPositionField(result: PositionResult, field: string): number {
  */
 function extractMarketField(result: MarketResult, field: string): number {
   switch (field) {
-    case 'totalSupplyAssets':
+    case "totalSupplyAssets":
       return Number(result.totalSupplyAssets);
-    case 'totalSupplyShares':
+    case "totalSupplyShares":
       return Number(result.totalSupplyShares);
-    case 'totalBorrowAssets':
+    case "totalBorrowAssets":
       return Number(result.totalBorrowAssets);
-    case 'totalBorrowShares':
+    case "totalBorrowShares":
       return Number(result.totalBorrowShares);
-    case 'lastUpdate':
+    case "lastUpdate":
       return Number(result.lastUpdate);
-    case 'fee':
+    case "fee":
       return Number(result.fee);
     default:
       throw new Error(`Unknown Market field: ${field}`);
@@ -66,11 +66,11 @@ function extractMarketField(result: MarketResult, field: string): number {
 function extractFilters(ref: StateRef): { chainId?: number; marketId?: string; user?: string } {
   const result: { chainId?: number; marketId?: string; user?: string } = {};
   for (const filter of ref.filters) {
-    if (filter.field === 'chainId' && filter.op === 'eq') {
+    if (filter.field === "chainId" && filter.op === "eq") {
       result.chainId = Number(filter.value);
-    } else if (filter.field === 'marketId' && filter.op === 'eq') {
+    } else if (filter.field === "marketId" && filter.op === "eq") {
       result.marketId = String(filter.value);
-    } else if (filter.field === 'user' && filter.op === 'eq') {
+    } else if (filter.field === "user" && filter.op === "eq") {
       result.user = String(filter.value);
     }
   }
@@ -95,23 +95,26 @@ export function createMorphoFetcher(envio: EnvioClient, options: DataFetcherOpti
     const marketId = filters.marketId;
 
     if (!marketId) {
-      throw new Error('marketId filter required for state queries');
+      throw new Error("marketId filter required for state queries");
     }
 
     if (verbose) {
-      logger.info({ entity: ref.entity_type, field: ref.field, chainId }, 'Fetching current state from RPC');
+      logger.info(
+        { entity: ref.entity_type, field: ref.field, chainId },
+        "Fetching current state from RPC",
+      );
     }
 
-    if (ref.entity_type === 'Position') {
+    if (ref.entity_type === "Position") {
       const user = filters.user;
       if (!user) {
-        throw new Error('user filter required for Position queries');
+        throw new Error("user filter required for Position queries");
       }
       const result = await readPosition(chainId, marketId, user);
       return extractPositionField(result, ref.field);
     }
 
-    if (ref.entity_type === 'Market') {
+    if (ref.entity_type === "Market") {
       const result = await readMarket(chainId, marketId);
       return extractMarketField(result, ref.field);
     }
@@ -128,7 +131,7 @@ export function createMorphoFetcher(envio: EnvioClient, options: DataFetcherOpti
     const marketId = filters.marketId;
 
     if (!marketId) {
-      throw new Error('marketId filter required for state queries');
+      throw new Error("marketId filter required for state queries");
     }
 
     // Resolve timestamp to block number
@@ -137,20 +140,20 @@ export function createMorphoFetcher(envio: EnvioClient, options: DataFetcherOpti
     if (verbose) {
       logger.info(
         { entity: ref.entity_type, field: ref.field, chainId, blockNumber, timestamp },
-        'Fetching historical state from RPC'
+        "Fetching historical state from RPC",
       );
     }
 
-    if (ref.entity_type === 'Position') {
+    if (ref.entity_type === "Position") {
       const user = filters.user;
       if (!user) {
-        throw new Error('user filter required for Position queries');
+        throw new Error("user filter required for Position queries");
       }
       const result = await readPositionAtBlock(chainId, marketId, user, BigInt(blockNumber));
       return extractPositionField(result, ref.field);
     }
 
-    if (ref.entity_type === 'Market') {
+    if (ref.entity_type === "Market") {
       const result = await readMarketAtBlock(chainId, marketId, BigInt(blockNumber));
       return extractMarketField(result, ref.field);
     }
@@ -178,7 +181,7 @@ export function createMorphoFetcher(envio: EnvioClient, options: DataFetcherOpti
       if (verbose) {
         logger.info(
           { eventType: ref.event_type, field: ref.field, aggregation: ref.aggregation },
-          'Fetching events from Envio'
+          "Fetching events from Envio",
         );
       }
       return envio.fetchEvents(ref, startTimeMs, endTimeMs);

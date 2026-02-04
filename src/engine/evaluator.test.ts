@@ -1,13 +1,26 @@
-import { describe, it, expect, vi } from 'vitest';
-import { evaluateNode, evaluateCondition, parseDuration, EvalContext, EvaluationError } from './evaluator.js';
-import { ExpressionNode, Constant, BinaryExpression, StateRef, EventRef, ComparisonOp } from '../types/index.js';
+import { describe, expect, it, vi } from "vitest";
+import {
+  type BinaryExpression,
+  ComparisonOp,
+  type Constant,
+  type EventRef,
+  type ExpressionNode,
+  type StateRef,
+} from "../types/index.js";
+import {
+  type EvalContext,
+  EvaluationError,
+  evaluateCondition,
+  evaluateNode,
+  parseDuration,
+} from "./evaluator.js";
 
 // Helper to create a mock context
 function createMockContext(overrides: Partial<EvalContext> = {}): EvalContext {
   const now = Date.now();
   return {
     chainId: 1,
-    windowDuration: '1h',
+    windowDuration: "1h",
     now,
     windowStart: now - 3600000, // 1 hour ago
     fetchState: vi.fn().mockResolvedValue(0),
@@ -18,210 +31,224 @@ function createMockContext(overrides: Partial<EvalContext> = {}): EvalContext {
 
 // Helper to create constant nodes
 function constant(value: number): Constant {
-  return { type: 'constant', value };
+  return { type: "constant", value };
 }
 
 // Helper to create binary expression nodes
-function expr(left: ExpressionNode, operator: 'add' | 'sub' | 'mul' | 'div', right: ExpressionNode): BinaryExpression {
-  return { type: 'expression', left, operator, right };
+function expr(
+  left: ExpressionNode,
+  operator: "add" | "sub" | "mul" | "div",
+  right: ExpressionNode,
+): BinaryExpression {
+  return { type: "expression", left, operator, right };
 }
 
-describe('parseDuration', () => {
-  it('parses minutes', () => {
-    expect(parseDuration('30m')).toBe(30 * 60 * 1000);
-    expect(parseDuration('1m')).toBe(60 * 1000);
+describe("parseDuration", () => {
+  it("parses minutes", () => {
+    expect(parseDuration("30m")).toBe(30 * 60 * 1000);
+    expect(parseDuration("1m")).toBe(60 * 1000);
   });
 
-  it('parses hours', () => {
-    expect(parseDuration('1h')).toBe(60 * 60 * 1000);
-    expect(parseDuration('24h')).toBe(24 * 60 * 60 * 1000);
+  it("parses hours", () => {
+    expect(parseDuration("1h")).toBe(60 * 60 * 1000);
+    expect(parseDuration("24h")).toBe(24 * 60 * 60 * 1000);
   });
 
-  it('parses days', () => {
-    expect(parseDuration('1d')).toBe(24 * 60 * 60 * 1000);
-    expect(parseDuration('7d')).toBe(7 * 24 * 60 * 60 * 1000);
+  it("parses days", () => {
+    expect(parseDuration("1d")).toBe(24 * 60 * 60 * 1000);
+    expect(parseDuration("7d")).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
-  it('parses weeks', () => {
-    expect(parseDuration('1w')).toBe(7 * 24 * 60 * 60 * 1000);
-    expect(parseDuration('2w')).toBe(14 * 24 * 60 * 60 * 1000);
+  it("parses weeks", () => {
+    expect(parseDuration("1w")).toBe(7 * 24 * 60 * 60 * 1000);
+    expect(parseDuration("2w")).toBe(14 * 24 * 60 * 60 * 1000);
   });
 
-  it('parses seconds', () => {
-    expect(parseDuration('30s')).toBe(30 * 1000);
-    expect(parseDuration('1s')).toBe(1000);
+  it("parses seconds", () => {
+    expect(parseDuration("30s")).toBe(30 * 1000);
+    expect(parseDuration("1s")).toBe(1000);
   });
 
-  it('throws on invalid format', () => {
-    expect(() => parseDuration('invalid')).toThrow('Invalid duration format');
-    expect(() => parseDuration('')).toThrow('Invalid duration format');
-    expect(() => parseDuration('1')).toThrow('Invalid duration format');
-    expect(() => parseDuration('1x')).toThrow('Invalid duration format');
+  it("throws on invalid format", () => {
+    expect(() => parseDuration("invalid")).toThrow("Invalid duration format");
+    expect(() => parseDuration("")).toThrow("Invalid duration format");
+    expect(() => parseDuration("1")).toThrow("Invalid duration format");
+    expect(() => parseDuration("1x")).toThrow("Invalid duration format");
   });
 });
 
-describe('evaluateNode', () => {
-  describe('constant nodes', () => {
-    it('returns the constant value', async () => {
+describe("evaluateNode", () => {
+  describe("constant nodes", () => {
+    it("returns the constant value", async () => {
       const ctx = createMockContext();
       expect(await evaluateNode(constant(42), ctx)).toBe(42);
       expect(await evaluateNode(constant(0), ctx)).toBe(0);
       expect(await evaluateNode(constant(-10), ctx)).toBe(-10);
-      expect(await evaluateNode(constant(3.14159), ctx)).toBe(3.14159);
+      expect(await evaluateNode(constant(Math.PI), ctx)).toBe(Math.PI);
     });
 
-    it('handles edge case numbers', async () => {
+    it("handles edge case numbers", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(constant(Number.MAX_SAFE_INTEGER), ctx)).toBe(Number.MAX_SAFE_INTEGER);
-      expect(await evaluateNode(constant(Number.MIN_SAFE_INTEGER), ctx)).toBe(Number.MIN_SAFE_INTEGER);
-      expect(await evaluateNode(constant(Infinity), ctx)).toBe(Infinity);
-      expect(await evaluateNode(constant(-Infinity), ctx)).toBe(-Infinity);
+      expect(await evaluateNode(constant(Number.MAX_SAFE_INTEGER), ctx)).toBe(
+        Number.MAX_SAFE_INTEGER,
+      );
+      expect(await evaluateNode(constant(Number.MIN_SAFE_INTEGER), ctx)).toBe(
+        Number.MIN_SAFE_INTEGER,
+      );
+      expect(await evaluateNode(constant(Number.POSITIVE_INFINITY), ctx)).toBe(
+        Number.POSITIVE_INFINITY,
+      );
+      expect(await evaluateNode(constant(Number.NEGATIVE_INFINITY), ctx)).toBe(
+        Number.NEGATIVE_INFINITY,
+      );
     });
   });
 
-  describe('binary expressions - add', () => {
-    it('adds two constants', async () => {
+  describe("binary expressions - add", () => {
+    it("adds two constants", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(2), 'add', constant(3)), ctx)).toBe(5);
+      expect(await evaluateNode(expr(constant(2), "add", constant(3)), ctx)).toBe(5);
     });
 
-    it('handles negative numbers', async () => {
+    it("handles negative numbers", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(-5), 'add', constant(3)), ctx)).toBe(-2);
-      expect(await evaluateNode(expr(constant(5), 'add', constant(-10)), ctx)).toBe(-5);
+      expect(await evaluateNode(expr(constant(-5), "add", constant(3)), ctx)).toBe(-2);
+      expect(await evaluateNode(expr(constant(5), "add", constant(-10)), ctx)).toBe(-5);
     });
 
-    it('handles zero', async () => {
+    it("handles zero", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(0), 'add', constant(5)), ctx)).toBe(5);
-      expect(await evaluateNode(expr(constant(5), 'add', constant(0)), ctx)).toBe(5);
+      expect(await evaluateNode(expr(constant(0), "add", constant(5)), ctx)).toBe(5);
+      expect(await evaluateNode(expr(constant(5), "add", constant(0)), ctx)).toBe(5);
     });
 
-    it('handles decimals', async () => {
+    it("handles decimals", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(1.5), 'add', constant(2.5)), ctx)).toBe(4);
-    });
-  });
-
-  describe('binary expressions - sub', () => {
-    it('subtracts two constants', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(10), 'sub', constant(3)), ctx)).toBe(7);
-    });
-
-    it('handles negative results', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(3), 'sub', constant(10)), ctx)).toBe(-7);
-    });
-
-    it('handles negative operands', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(-5), 'sub', constant(-3)), ctx)).toBe(-2);
+      expect(await evaluateNode(expr(constant(1.5), "add", constant(2.5)), ctx)).toBe(4);
     });
   });
 
-  describe('binary expressions - mul', () => {
-    it('multiplies two constants', async () => {
+  describe("binary expressions - sub", () => {
+    it("subtracts two constants", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(4), 'mul', constant(5)), ctx)).toBe(20);
+      expect(await evaluateNode(expr(constant(10), "sub", constant(3)), ctx)).toBe(7);
     });
 
-    it('handles zero', async () => {
+    it("handles negative results", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(100), 'mul', constant(0)), ctx)).toBe(0);
-      expect(await evaluateNode(expr(constant(0), 'mul', constant(100)), ctx)).toBe(0);
+      expect(await evaluateNode(expr(constant(3), "sub", constant(10)), ctx)).toBe(-7);
     });
 
-    it('handles negative numbers', async () => {
+    it("handles negative operands", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(-3), 'mul', constant(4)), ctx)).toBe(-12);
-      expect(await evaluateNode(expr(constant(-3), 'mul', constant(-4)), ctx)).toBe(12);
-    });
-
-    it('handles decimals', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(2.5), 'mul', constant(4)), ctx)).toBe(10);
+      expect(await evaluateNode(expr(constant(-5), "sub", constant(-3)), ctx)).toBe(-2);
     });
   });
 
-  describe('binary expressions - div', () => {
-    it('divides two constants', async () => {
+  describe("binary expressions - mul", () => {
+    it("multiplies two constants", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(20), 'div', constant(4)), ctx)).toBe(5);
+      expect(await evaluateNode(expr(constant(4), "mul", constant(5)), ctx)).toBe(20);
     });
 
-    it('handles division resulting in decimal', async () => {
+    it("handles zero", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(7), 'div', constant(2)), ctx)).toBe(3.5);
+      expect(await evaluateNode(expr(constant(100), "mul", constant(0)), ctx)).toBe(0);
+      expect(await evaluateNode(expr(constant(0), "mul", constant(100)), ctx)).toBe(0);
     });
 
-    it('throws EvaluationError for division by zero', async () => {
+    it("handles negative numbers", async () => {
       const ctx = createMockContext();
-      await expect(evaluateNode(expr(constant(10), 'div', constant(0)), ctx))
-        .rejects.toThrow(EvaluationError);
-      await expect(evaluateNode(expr(constant(10), 'div', constant(0)), ctx))
-        .rejects.toThrow('Division by zero');
+      expect(await evaluateNode(expr(constant(-3), "mul", constant(4)), ctx)).toBe(-12);
+      expect(await evaluateNode(expr(constant(-3), "mul", constant(-4)), ctx)).toBe(12);
     });
 
-    it('handles negative numbers', async () => {
+    it("handles decimals", async () => {
       const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(-12), 'div', constant(4)), ctx)).toBe(-3);
-      expect(await evaluateNode(expr(constant(12), 'div', constant(-4)), ctx)).toBe(-3);
-      expect(await evaluateNode(expr(constant(-12), 'div', constant(-4)), ctx)).toBe(3);
-    });
-
-    it('handles zero numerator', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateNode(expr(constant(0), 'div', constant(5)), ctx)).toBe(0);
+      expect(await evaluateNode(expr(constant(2.5), "mul", constant(4)), ctx)).toBe(10);
     });
   });
 
-  describe('nested expressions', () => {
-    it('evaluates nested addition', async () => {
+  describe("binary expressions - div", () => {
+    it("divides two constants", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateNode(expr(constant(20), "div", constant(4)), ctx)).toBe(5);
+    });
+
+    it("handles division resulting in decimal", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateNode(expr(constant(7), "div", constant(2)), ctx)).toBe(3.5);
+    });
+
+    it("throws EvaluationError for division by zero", async () => {
+      const ctx = createMockContext();
+      await expect(evaluateNode(expr(constant(10), "div", constant(0)), ctx)).rejects.toThrow(
+        EvaluationError,
+      );
+      await expect(evaluateNode(expr(constant(10), "div", constant(0)), ctx)).rejects.toThrow(
+        "Division by zero",
+      );
+    });
+
+    it("handles negative numbers", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateNode(expr(constant(-12), "div", constant(4)), ctx)).toBe(-3);
+      expect(await evaluateNode(expr(constant(12), "div", constant(-4)), ctx)).toBe(-3);
+      expect(await evaluateNode(expr(constant(-12), "div", constant(-4)), ctx)).toBe(3);
+    });
+
+    it("handles zero numerator", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateNode(expr(constant(0), "div", constant(5)), ctx)).toBe(0);
+    });
+  });
+
+  describe("nested expressions", () => {
+    it("evaluates nested addition", async () => {
       const ctx = createMockContext();
       // (1 + 2) + 3 = 6
-      const nested = expr(expr(constant(1), 'add', constant(2)), 'add', constant(3));
+      const nested = expr(expr(constant(1), "add", constant(2)), "add", constant(3));
       expect(await evaluateNode(nested, ctx)).toBe(6);
     });
 
-    it('evaluates deeply nested expressions', async () => {
+    it("evaluates deeply nested expressions", async () => {
       const ctx = createMockContext();
       // ((2 + 3) * 4) - 5 = 15
-      const inner = expr(constant(2), 'add', constant(3)); // 5
-      const middle = expr(inner, 'mul', constant(4)); // 20
-      const outer = expr(middle, 'sub', constant(5)); // 15
+      const inner = expr(constant(2), "add", constant(3)); // 5
+      const middle = expr(inner, "mul", constant(4)); // 20
+      const outer = expr(middle, "sub", constant(5)); // 15
       expect(await evaluateNode(outer, ctx)).toBe(15);
     });
 
-    it('evaluates complex nested with division', async () => {
+    it("evaluates complex nested with division", async () => {
       const ctx = createMockContext();
       // (10 / 2) + (8 - 3) = 5 + 5 = 10
-      const left = expr(constant(10), 'div', constant(2));
-      const right = expr(constant(8), 'sub', constant(3));
-      const result = expr(left, 'add', right);
+      const left = expr(constant(10), "div", constant(2));
+      const right = expr(constant(8), "sub", constant(3));
+      const result = expr(left, "add", right);
       expect(await evaluateNode(result, ctx)).toBe(10);
     });
 
-    it('throws on division by zero in nested expression', async () => {
+    it("throws on division by zero in nested expression", async () => {
       const ctx = createMockContext();
       // (10 / 0) + 5 should throw, not silently return 5
-      const divByZero = expr(constant(10), 'div', constant(0));
-      const result = expr(divByZero, 'add', constant(5));
+      const divByZero = expr(constant(10), "div", constant(0));
+      const result = expr(divByZero, "add", constant(5));
       await expect(evaluateNode(result, ctx)).rejects.toThrow(EvaluationError);
     });
   });
 
-  describe('state references', () => {
-    it('fetches state with current snapshot', async () => {
+  describe("state references", () => {
+    it("fetches state with current snapshot", async () => {
       const fetchState = vi.fn().mockResolvedValue(100);
       const ctx = createMockContext({ fetchState });
 
       const stateRef: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
-        filters: [{ field: 'id', op: 'eq', value: '0x123' }],
-        field: 'tvl',
-        snapshot: 'current',
+        type: "state",
+        entity_type: "Pool",
+        filters: [{ field: "id", op: "eq", value: "0x123" }],
+        field: "tvl",
+        snapshot: "current",
       };
 
       const result = await evaluateNode(stateRef, ctx);
@@ -229,16 +256,16 @@ describe('evaluateNode', () => {
       expect(fetchState).toHaveBeenCalledWith(stateRef, undefined);
     });
 
-    it('fetches state with window_start snapshot', async () => {
+    it("fetches state with window_start snapshot", async () => {
       const fetchState = vi.fn().mockResolvedValue(50);
       const ctx = createMockContext({ fetchState });
 
       const stateRef: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
-        snapshot: 'window_start',
+        field: "tvl",
+        snapshot: "window_start",
       };
 
       const result = await evaluateNode(stateRef, ctx);
@@ -246,17 +273,17 @@ describe('evaluateNode', () => {
       expect(fetchState).toHaveBeenCalledWith(stateRef, ctx.windowStart);
     });
 
-    it('fetches state with custom duration snapshot', async () => {
+    it("fetches state with custom duration snapshot", async () => {
       const fetchState = vi.fn().mockResolvedValue(75);
       const now = Date.now();
       const ctx = createMockContext({ fetchState, now });
 
       const stateRef: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
-        snapshot: '2d',
+        field: "tvl",
+        snapshot: "2d",
       };
 
       const result = await evaluateNode(stateRef, ctx);
@@ -264,15 +291,15 @@ describe('evaluateNode', () => {
       expect(fetchState).toHaveBeenCalledWith(stateRef, now - 2 * 24 * 60 * 60 * 1000);
     });
 
-    it('fetches state without snapshot (defaults to current)', async () => {
+    it("fetches state without snapshot (defaults to current)", async () => {
       const fetchState = vi.fn().mockResolvedValue(200);
       const ctx = createMockContext({ fetchState });
 
       const stateRef: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
+        field: "tvl",
       };
 
       const result = await evaluateNode(stateRef, ctx);
@@ -281,19 +308,19 @@ describe('evaluateNode', () => {
     });
   });
 
-  describe('event references', () => {
-    it('fetches events with signal-level window', async () => {
+  describe("event references", () => {
+    it("fetches events with signal-level window", async () => {
       const fetchEvents = vi.fn().mockResolvedValue(500);
       const now = Date.now();
       const windowStart = now - 3600000;
       const ctx = createMockContext({ fetchEvents, now, windowStart });
 
       const eventRef: EventRef = {
-        type: 'event',
-        event_type: 'Swap',
+        type: "event",
+        event_type: "Swap",
         filters: [],
-        field: 'amountUSD',
-        aggregation: 'sum',
+        field: "amountUSD",
+        aggregation: "sum",
       };
 
       const result = await evaluateNode(eventRef, ctx);
@@ -301,18 +328,18 @@ describe('evaluateNode', () => {
       expect(fetchEvents).toHaveBeenCalledWith(eventRef, windowStart, now);
     });
 
-    it('fetches events with custom window override', async () => {
+    it("fetches events with custom window override", async () => {
       const fetchEvents = vi.fn().mockResolvedValue(1000);
       const now = Date.now();
       const ctx = createMockContext({ fetchEvents, now });
 
       const eventRef: EventRef = {
-        type: 'event',
-        event_type: 'Swap',
+        type: "event",
+        event_type: "Swap",
         filters: [],
-        field: 'amountUSD',
-        aggregation: 'sum',
-        window: '2d',
+        field: "amountUSD",
+        aggregation: "sum",
+        window: "2d",
       };
 
       const result = await evaluateNode(eventRef, ctx);
@@ -322,303 +349,318 @@ describe('evaluateNode', () => {
     });
   });
 
-  describe('mixed expressions', () => {
-    it('combines state and constant in expression', async () => {
+  describe("mixed expressions", () => {
+    it("combines state and constant in expression", async () => {
       const fetchState = vi.fn().mockResolvedValue(100);
       const ctx = createMockContext({ fetchState });
 
       const stateRef: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
+        field: "tvl",
       };
 
       // state * 0.9 (10% decrease threshold)
-      const result = expr(stateRef, 'mul', constant(0.9));
+      const result = expr(stateRef, "mul", constant(0.9));
       expect(await evaluateNode(result, ctx)).toBe(90);
     });
 
-    it('combines event and constant in expression', async () => {
+    it("combines event and constant in expression", async () => {
       const fetchEvents = vi.fn().mockResolvedValue(1000);
       const ctx = createMockContext({ fetchEvents });
 
       const eventRef: EventRef = {
-        type: 'event',
-        event_type: 'Swap',
+        type: "event",
+        event_type: "Swap",
         filters: [],
-        field: 'amountUSD',
-        aggregation: 'sum',
+        field: "amountUSD",
+        aggregation: "sum",
       };
 
       // event / 1000 (convert to K)
-      const result = expr(eventRef, 'div', constant(1000));
+      const result = expr(eventRef, "div", constant(1000));
       expect(await evaluateNode(result, ctx)).toBe(1);
     });
   });
 });
 
-describe('evaluateCondition', () => {
-  describe('gt (greater than)', () => {
-    it('returns true when left > right', async () => {
+describe("evaluateCondition", () => {
+  describe("gt (greater than)", () => {
+    it("returns true when left > right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(10), 'gt', constant(5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(10), "gt", constant(5), ctx)).toBe(true);
     });
 
-    it('returns false when left = right', async () => {
+    it("returns false when left = right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'gt', constant(5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(5), "gt", constant(5), ctx)).toBe(false);
     });
 
-    it('returns false when left < right', async () => {
+    it("returns false when left < right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(3), 'gt', constant(5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(3), "gt", constant(5), ctx)).toBe(false);
     });
 
-    it('works with negative numbers', async () => {
+    it("works with negative numbers", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(-3), 'gt', constant(-5), ctx)).toBe(true);
-      expect(await evaluateCondition(constant(-5), 'gt', constant(-3), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(-3), "gt", constant(-5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(-5), "gt", constant(-3), ctx)).toBe(false);
     });
 
-    it('works with decimals', async () => {
+    it("works with decimals", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5.1), 'gt', constant(5.0), ctx)).toBe(true);
-      expect(await evaluateCondition(constant(5.0), 'gt', constant(5.1), ctx)).toBe(false);
-    });
-  });
-
-  describe('gte (greater than or equal)', () => {
-    it('returns true when left > right', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateCondition(constant(10), 'gte', constant(5), ctx)).toBe(true);
-    });
-
-    it('returns true when left = right', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'gte', constant(5), ctx)).toBe(true);
-    });
-
-    it('returns false when left < right', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateCondition(constant(3), 'gte', constant(5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(5.1), "gt", constant(5.0), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(5.0), "gt", constant(5.1), ctx)).toBe(false);
     });
   });
 
-  describe('lt (less than)', () => {
-    it('returns true when left < right', async () => {
+  describe("gte (greater than or equal)", () => {
+    it("returns true when left > right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(3), 'lt', constant(5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(10), "gte", constant(5), ctx)).toBe(true);
     });
 
-    it('returns false when left = right', async () => {
+    it("returns true when left = right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'lt', constant(5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(5), "gte", constant(5), ctx)).toBe(true);
     });
 
-    it('returns false when left > right', async () => {
+    it("returns false when left < right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(10), 'lt', constant(5), ctx)).toBe(false);
-    });
-
-    it('works with negative numbers', async () => {
-      const ctx = createMockContext();
-      expect(await evaluateCondition(constant(-5), 'lt', constant(-3), ctx)).toBe(true);
-      expect(await evaluateCondition(constant(-3), 'lt', constant(-5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(3), "gte", constant(5), ctx)).toBe(false);
     });
   });
 
-  describe('lte (less than or equal)', () => {
-    it('returns true when left < right', async () => {
+  describe("lt (less than)", () => {
+    it("returns true when left < right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(3), 'lte', constant(5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(3), "lt", constant(5), ctx)).toBe(true);
     });
 
-    it('returns true when left = right', async () => {
+    it("returns false when left = right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'lte', constant(5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(5), "lt", constant(5), ctx)).toBe(false);
     });
 
-    it('returns false when left > right', async () => {
+    it("returns false when left > right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(10), 'lte', constant(5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(10), "lt", constant(5), ctx)).toBe(false);
+    });
+
+    it("works with negative numbers", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateCondition(constant(-5), "lt", constant(-3), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(-3), "lt", constant(-5), ctx)).toBe(false);
     });
   });
 
-  describe('eq (equal)', () => {
-    it('returns true when left = right', async () => {
+  describe("lte (less than or equal)", () => {
+    it("returns true when left < right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'eq', constant(5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(3), "lte", constant(5), ctx)).toBe(true);
     });
 
-    it('returns false when left != right', async () => {
+    it("returns true when left = right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'eq', constant(10), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(5), "lte", constant(5), ctx)).toBe(true);
     });
 
-    it('handles zero equality', async () => {
+    it("returns false when left > right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(0), 'eq', constant(0), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(10), "lte", constant(5), ctx)).toBe(false);
+    });
+  });
+
+  describe("eq (equal)", () => {
+    it("returns true when left = right", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateCondition(constant(5), "eq", constant(5), ctx)).toBe(true);
     });
 
-    it('handles negative equality', async () => {
+    it("returns false when left != right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(-5), 'eq', constant(-5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(5), "eq", constant(10), ctx)).toBe(false);
     });
 
-    it('handles decimal precision', async () => {
+    it("handles zero equality", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateCondition(constant(0), "eq", constant(0), ctx)).toBe(true);
+    });
+
+    it("handles negative equality", async () => {
+      const ctx = createMockContext();
+      expect(await evaluateCondition(constant(-5), "eq", constant(-5), ctx)).toBe(true);
+    });
+
+    it("handles decimal precision", async () => {
       const ctx = createMockContext();
       // Note: JavaScript floating point precision issues
-      expect(await evaluateCondition(constant(0.1 + 0.2), 'eq', constant(0.3), ctx)).toBe(false); // Known JS behavior
-      expect(await evaluateCondition(constant(0.5), 'eq', constant(0.5), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(0.1 + 0.2), "eq", constant(0.3), ctx)).toBe(false); // Known JS behavior
+      expect(await evaluateCondition(constant(0.5), "eq", constant(0.5), ctx)).toBe(true);
     });
   });
 
-  describe('neq (not equal)', () => {
-    it('returns true when left != right', async () => {
+  describe("neq (not equal)", () => {
+    it("returns true when left != right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'neq', constant(10), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(5), "neq", constant(10), ctx)).toBe(true);
     });
 
-    it('returns false when left = right', async () => {
+    it("returns false when left = right", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(5), 'neq', constant(5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(5), "neq", constant(5), ctx)).toBe(false);
     });
 
-    it('handles zero', async () => {
+    it("handles zero", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(0), 'neq', constant(1), ctx)).toBe(true);
-      expect(await evaluateCondition(constant(0), 'neq', constant(0), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(0), "neq", constant(1), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(0), "neq", constant(0), ctx)).toBe(false);
     });
   });
 
-  describe('unknown operator', () => {
-    it('returns false for unknown operator', async () => {
+  describe("unknown operator", () => {
+    it("returns false for unknown operator", async () => {
       const ctx = createMockContext();
       // @ts-expect-error - testing invalid operator
-      expect(await evaluateCondition(constant(5), 'invalid', constant(5), ctx)).toBe(false);
+      expect(await evaluateCondition(constant(5), "invalid", constant(5), ctx)).toBe(false);
     });
   });
 
-  describe('with expressions', () => {
-    it('compares expression results', async () => {
+  describe("with expressions", () => {
+    it("compares expression results", async () => {
       const ctx = createMockContext();
       // (2 + 3) > (1 + 2) => 5 > 3 => true
-      const left = expr(constant(2), 'add', constant(3));
-      const right = expr(constant(1), 'add', constant(2));
-      expect(await evaluateCondition(left, 'gt', right, ctx)).toBe(true);
+      const left = expr(constant(2), "add", constant(3));
+      const right = expr(constant(1), "add", constant(2));
+      expect(await evaluateCondition(left, "gt", right, ctx)).toBe(true);
     });
 
-    it('throws on division by zero in condition', async () => {
+    it("throws on division by zero in condition", async () => {
       const ctx = createMockContext();
       // (10 / 0) should throw, not silently evaluate
-      const left = expr(constant(10), 'div', constant(0));
-      await expect(evaluateCondition(left, 'eq', constant(0), ctx)).rejects.toThrow(EvaluationError);
+      const left = expr(constant(10), "div", constant(0));
+      await expect(evaluateCondition(left, "eq", constant(0), ctx)).rejects.toThrow(
+        EvaluationError,
+      );
     });
 
-    it('handles complex nested expressions in condition', async () => {
+    it("handles complex nested expressions in condition", async () => {
       const ctx = createMockContext();
       // ((10 - 5) * 2) >= (15 / 3) => 10 >= 5 => true
-      const leftInner = expr(constant(10), 'sub', constant(5));
-      const left = expr(leftInner, 'mul', constant(2));
-      const right = expr(constant(15), 'div', constant(3));
-      expect(await evaluateCondition(left, 'gte', right, ctx)).toBe(true);
+      const leftInner = expr(constant(10), "sub", constant(5));
+      const left = expr(leftInner, "mul", constant(2));
+      const right = expr(constant(15), "div", constant(3));
+      expect(await evaluateCondition(left, "gte", right, ctx)).toBe(true);
     });
   });
 
-  describe('with state and events', () => {
-    it('compares state values', async () => {
-      const fetchState = vi.fn()
-        .mockResolvedValueOnce(100)  // current TVL
+  describe("with state and events", () => {
+    it("compares state values", async () => {
+      const fetchState = vi
+        .fn()
+        .mockResolvedValueOnce(100) // current TVL
         .mockResolvedValueOnce(120); // TVL at window_start
 
       const ctx = createMockContext({ fetchState });
 
       const currentState: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
-        snapshot: 'current',
+        field: "tvl",
+        snapshot: "current",
       };
 
       const pastState: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
-        snapshot: 'window_start',
+        field: "tvl",
+        snapshot: "window_start",
       };
 
       // current TVL < past TVL (TVL dropped)
-      expect(await evaluateCondition(currentState, 'lt', pastState, ctx)).toBe(true);
+      expect(await evaluateCondition(currentState, "lt", pastState, ctx)).toBe(true);
     });
 
-    it('compares state with threshold expression', async () => {
-      const fetchState = vi.fn()
-        .mockResolvedValueOnce(85)   // current TVL
+    it("compares state with threshold expression", async () => {
+      const fetchState = vi
+        .fn()
+        .mockResolvedValueOnce(85) // current TVL
         .mockResolvedValueOnce(100); // TVL at window_start
 
       const ctx = createMockContext({ fetchState });
 
       const currentState: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
-        snapshot: 'current',
+        field: "tvl",
+        snapshot: "current",
       };
 
       const pastState: StateRef = {
-        type: 'state',
-        entity_type: 'Pool',
+        type: "state",
+        entity_type: "Pool",
         filters: [],
-        field: 'tvl',
-        snapshot: 'window_start',
+        field: "tvl",
+        snapshot: "window_start",
       };
 
       // current < past * 0.9 (10% drop threshold)
-      const threshold = expr(pastState, 'mul', constant(0.9)); // 100 * 0.9 = 90
-      expect(await evaluateCondition(currentState, 'lt', threshold, ctx)).toBe(true); // 85 < 90
+      const threshold = expr(pastState, "mul", constant(0.9)); // 100 * 0.9 = 90
+      expect(await evaluateCondition(currentState, "lt", threshold, ctx)).toBe(true); // 85 < 90
     });
 
-    it('compares event aggregations', async () => {
+    it("compares event aggregations", async () => {
       const fetchEvents = vi.fn().mockResolvedValue(50000);
       const ctx = createMockContext({ fetchEvents });
 
       const eventRef: EventRef = {
-        type: 'event',
-        event_type: 'Swap',
+        type: "event",
+        event_type: "Swap",
         filters: [],
-        field: 'amountUSD',
-        aggregation: 'sum',
+        field: "amountUSD",
+        aggregation: "sum",
       };
 
       // sum(swaps) > 10000
-      expect(await evaluateCondition(eventRef, 'gt', constant(10000), ctx)).toBe(true);
+      expect(await evaluateCondition(eventRef, "gt", constant(10000), ctx)).toBe(true);
     });
   });
 
-  describe('edge cases with special numbers', () => {
-    it('handles Infinity comparisons', async () => {
+  describe("edge cases with special numbers", () => {
+    it("handles Infinity comparisons", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(Infinity), 'gt', constant(1000000), ctx)).toBe(true);
-      expect(await evaluateCondition(constant(-Infinity), 'lt', constant(-1000000), ctx)).toBe(true);
-      expect(await evaluateCondition(constant(Infinity), 'eq', constant(Infinity), ctx)).toBe(true);
+      expect(
+        await evaluateCondition(constant(Number.POSITIVE_INFINITY), "gt", constant(1000000), ctx),
+      ).toBe(true);
+      expect(
+        await evaluateCondition(constant(Number.NEGATIVE_INFINITY), "lt", constant(-1000000), ctx),
+      ).toBe(true);
+      expect(
+        await evaluateCondition(
+          constant(Number.POSITIVE_INFINITY),
+          "eq",
+          constant(Number.POSITIVE_INFINITY),
+          ctx,
+        ),
+      ).toBe(true);
     });
 
-    it('handles NaN (from invalid operations)', async () => {
+    it("handles NaN (from invalid operations)", async () => {
       const ctx = createMockContext();
       // In JS, NaN !== NaN
-      const nanValue = constant(NaN);
-      expect(await evaluateCondition(nanValue, 'eq', nanValue, ctx)).toBe(false);
-      expect(await evaluateCondition(nanValue, 'neq', nanValue, ctx)).toBe(true);
+      const nanValue = constant(Number.NaN);
+      expect(await evaluateCondition(nanValue, "eq", nanValue, ctx)).toBe(false);
+      expect(await evaluateCondition(nanValue, "neq", nanValue, ctx)).toBe(true);
     });
 
-    it('handles very small differences', async () => {
+    it("handles very small differences", async () => {
       const ctx = createMockContext();
-      expect(await evaluateCondition(constant(0.000001), 'gt', constant(0), ctx)).toBe(true);
-      expect(await evaluateCondition(constant(0.000001), 'lt', constant(0.000002), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(0.000001), "gt", constant(0), ctx)).toBe(true);
+      expect(await evaluateCondition(constant(0.000001), "lt", constant(0.000002), ctx)).toBe(true);
     });
   });
 });

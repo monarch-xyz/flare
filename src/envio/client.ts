@@ -1,9 +1,9 @@
-import { GraphQLClient } from 'graphql-request';
-import { config } from '../config/index.js';
-import { EventRef, StateRef, Filter } from '../types/index.js';
-import { createLogger } from '../utils/logger.js';
+import { GraphQLClient } from "graphql-request";
+import { config } from "../config/index.js";
+import type { EventRef, Filter, StateRef } from "../types/index.js";
+import { createLogger } from "../utils/logger.js";
 
-const logger = createLogger('envio-client');
+const logger = createLogger("envio-client");
 
 /**
  * Error thrown when Envio queries fail.
@@ -12,10 +12,10 @@ const logger = createLogger('envio-client');
 export class EnvioQueryError extends Error {
   constructor(
     message: string,
-    public readonly queryCount: number
+    public readonly queryCount: number,
   ) {
     super(message);
-    this.name = 'EnvioQueryError';
+    this.name = "EnvioQueryError";
   }
 }
 
@@ -23,13 +23,13 @@ export class EnvioQueryError extends Error {
  * Query types for batching
  */
 export interface StateQuery {
-  type: 'state';
+  type: "state";
   ref: StateRef;
   alias: string;
 }
 
 export interface EventQuery {
-  type: 'event';
+  type: "event";
   ref: EventRef;
   startTimeMs: number;
   endTimeMs: number;
@@ -92,7 +92,7 @@ export class EnvioClient {
 
   constructor(endpoint: string = config.envio.endpoint) {
     if (!endpoint) {
-      throw new Error('Envio endpoint not configured');
+      throw new Error("Envio endpoint not configured");
     }
     this.client = new GraphQLClient(endpoint);
   }
@@ -104,16 +104,16 @@ export class EnvioClient {
     const where: Record<string, any> = {};
     for (const filter of filters) {
       const opMap: Record<string, string> = {
-        eq: '_eq',
-        neq: '_neq',
-        gt: '_gt',
-        gte: '_gte',
-        lt: '_lt',
-        lte: '_lte',
-        in: '_in',
-        contains: '_ilike',
+        eq: "_eq",
+        neq: "_neq",
+        gt: "_gt",
+        gte: "_gte",
+        lt: "_lt",
+        lte: "_lte",
+        in: "_in",
+        contains: "_ilike",
       };
-      const gqlOp = opMap[filter.op] || '_eq';
+      const gqlOp = opMap[filter.op] || "_eq";
       where[filter.field] = { [gqlOp]: filter.value };
     }
     return where;
@@ -124,36 +124,42 @@ export class EnvioClient {
    * Note: Envio does NOT support time-travel (block: {number: X}).
    * For historical state, use RPC via src/rpc/client.ts instead.
    */
-  private buildStateQueryFragment(query: StateQuery): { fragment: string; variables: Record<string, any> } {
+  private buildStateQueryFragment(query: StateQuery): {
+    fragment: string;
+    variables: Record<string, any>;
+  } {
     const where = this.translateFilters(query.ref.filters);
 
     return {
       fragment: `${query.alias}: ${query.ref.entity_type}(where: $${query.alias}_where, limit: 1) {
         ${query.ref.field}
       }`,
-      variables: { [`${query.alias}_where`]: where }
+      variables: { [`${query.alias}_where`]: where },
     };
   }
 
   /**
    * Build an event query fragment for batching
    */
-  private buildEventQueryFragment(query: EventQuery): { fragment: string; variables: Record<string, any> } {
+  private buildEventQueryFragment(query: EventQuery): {
+    fragment: string;
+    variables: Record<string, any>;
+  } {
     const where = this.translateFilters(this.remapEventFilters(query.ref.filters));
-    const entityName = query.ref.event_type.startsWith('Morpho_')
+    const entityName = query.ref.event_type.startsWith("Morpho_")
       ? query.ref.event_type
       : `Morpho_${query.ref.event_type}`;
 
-    where['timestamp'] = {
+    where.timestamp = {
       _gte: Math.floor(query.startTimeMs / 1000),
-      _lte: Math.floor(query.endTimeMs / 1000)
+      _lte: Math.floor(query.endTimeMs / 1000),
     };
 
     return {
       fragment: `${query.alias}: ${entityName}(where: $${query.alias}_where) {
         ${query.ref.field}
       }`,
-      variables: { [`${query.alias}_where`]: where }
+      variables: { [`${query.alias}_where`]: where },
     };
   }
 
@@ -162,11 +168,11 @@ export class EnvioClient {
    */
   private remapEventFilters(filters: Filter[]): Filter[] {
     return filters.map((filter) => {
-      if (filter.field === 'marketId') {
-        return { ...filter, field: 'market_id' };
+      if (filter.field === "marketId") {
+        return { ...filter, field: "market_id" };
       }
-      if (filter.field === 'user') {
-        return { ...filter, field: 'onBehalf' };
+      if (filter.field === "user") {
+        return { ...filter, field: "onBehalf" };
       }
       return filter;
     });
@@ -176,12 +182,17 @@ export class EnvioClient {
    * Build variable definitions for the batch query
    */
   private buildVariableDefinitions(queries: BatchQuery[]): string {
-    return queries.map(q => {
-      const entityName = q.type === 'state'
-        ? q.ref.entity_type
-        : (q.ref.event_type.startsWith('Morpho_') ? q.ref.event_type : `Morpho_${q.ref.event_type}`);
-      return `$${q.alias}_where: ${entityName}_bool_exp!`;
-    }).join(', ');
+    return queries
+      .map((q) => {
+        const entityName =
+          q.type === "state"
+            ? q.ref.entity_type
+            : q.ref.event_type.startsWith("Morpho_")
+              ? q.ref.event_type
+              : `Morpho_${q.ref.event_type}`;
+        return `$${q.alias}_where: ${entityName}_bool_exp!`;
+      })
+      .join(", ");
   }
 
   /**
@@ -194,9 +205,10 @@ export class EnvioClient {
     let variables: Record<string, any> = {};
 
     for (const query of queries) {
-      const built = query.type === 'state'
-        ? this.buildStateQueryFragment(query)
-        : this.buildEventQueryFragment(query);
+      const built =
+        query.type === "state"
+          ? this.buildStateQueryFragment(query)
+          : this.buildEventQueryFragment(query);
 
       fragments.push(built.fragment);
       variables = { ...variables, ...built.variables };
@@ -205,7 +217,7 @@ export class EnvioClient {
     const variableDefs = this.buildVariableDefinitions(queries);
     const batchQuery = `
       query BatchQuery(${variableDefs}) {
-        ${fragments.join('\n        ')}
+        ${fragments.join("\n        ")}
       }
     `;
 
@@ -216,7 +228,7 @@ export class EnvioClient {
       for (const query of queries) {
         const rows = data[query.alias] || [];
 
-        if (query.type === 'state') {
+        if (query.type === "state") {
           const entity = rows[0];
           results[query.alias] = entity ? Number(entity[query.ref.field]) : 0;
         } else {
@@ -226,12 +238,12 @@ export class EnvioClient {
 
       return results;
     } catch (error: any) {
-      logger.error({ error: error.message, queryCount: queries.length }, 'Envio batch query failed');
-      // Propagate error - do NOT silently return zeros
-      throw new EnvioQueryError(
-        `Envio batch query failed: ${error.message}`,
-        queries.length
+      logger.error(
+        { error: error.message, queryCount: queries.length },
+        "Envio batch query failed",
       );
+      // Propagate error - do NOT silently return zeros
+      throw new EnvioQueryError(`Envio batch query failed: ${error.message}`, queries.length);
     }
   }
 
@@ -247,15 +259,15 @@ export class EnvioClient {
     });
 
     switch (ref.aggregation) {
-      case 'sum':
+      case "sum":
         return values.reduce((a, b) => a + b, 0);
-      case 'count':
+      case "count":
         return rows.length;
-      case 'avg':
+      case "avg":
         return values.reduce((a, b) => a + b, 0) / rows.length;
-      case 'min':
+      case "min":
         return Math.min(...values);
-      case 'max':
+      case "max":
         return Math.max(...values);
       default:
         return 0;
@@ -268,26 +280,30 @@ export class EnvioClient {
    * Point-in-time state reads use RPC via src/rpc/client.ts.
    */
   async fetchState(ref: StateRef): Promise<number> {
-    const result = await this.batchQueries([{
-      type: 'state',
-      ref,
-      alias: 'result'
-    }]);
-    return result['result'];
+    const result = await this.batchQueries([
+      {
+        type: "state",
+        ref,
+        alias: "result",
+      },
+    ]);
+    return result.result;
   }
 
   /**
    * Fetch and aggregate events in a time window
    */
   async fetchEvents(ref: EventRef, startTimeMs: number, endTimeMs: number): Promise<number> {
-    const result = await this.batchQueries([{
-      type: 'event',
-      ref,
-      startTimeMs,
-      endTimeMs,
-      alias: 'result'
-    }]);
-    return result['result'];
+    const result = await this.batchQueries([
+      {
+        type: "event",
+        ref,
+        startTimeMs,
+        endTimeMs,
+        alias: "result",
+      },
+    ]);
+    return result.result;
   }
 
   /**
@@ -296,7 +312,7 @@ export class EnvioClient {
    */
   async fetchPositions(chainId: number, filters: Filter[]): Promise<Position[]> {
     const where = this.translateFilters(filters);
-    where['chainId'] = { _eq: chainId };
+    where.chainId = { _eq: chainId };
 
     const query = `
       query GetPositions($where: Position_bool_exp!) {
@@ -317,7 +333,7 @@ export class EnvioClient {
       const data: any = await this.client.request(query, { where });
       return data.Position || [];
     } catch (error: any) {
-      logger.error({ error: error.message, chainId }, 'Envio positions fetch failed');
+      logger.error({ error: error.message, chainId }, "Envio positions fetch failed");
       return [];
     }
   }
@@ -328,7 +344,7 @@ export class EnvioClient {
    */
   async fetchMarkets(chainId: number, filters: Filter[] = []): Promise<Market[]> {
     const where = this.translateFilters(filters);
-    where['chainId'] = { _eq: chainId };
+    where.chainId = { _eq: chainId };
 
     const query = `
       query GetMarkets($where: Market_bool_exp!) {
@@ -354,7 +370,7 @@ export class EnvioClient {
       const data: any = await this.client.request(query, { where });
       return data.Market || [];
     } catch (error: any) {
-      logger.error({ error: error.message, chainId }, 'Envio markets fetch failed');
+      logger.error({ error: error.message, chainId }, "Envio markets fetch failed");
       return [];
     }
   }
@@ -367,15 +383,15 @@ export class EnvioClient {
     chainId: number,
     startTimeMs: number,
     endTimeMs: number,
-    filters: Filter[] = []
+    filters: Filter[] = [],
   ): Promise<MorphoEvent[]> {
     const where = this.translateFilters(this.remapEventFilters(filters));
-    const entityName = eventType.startsWith('Morpho_') ? eventType : `Morpho_${eventType}`;
+    const entityName = eventType.startsWith("Morpho_") ? eventType : `Morpho_${eventType}`;
 
-    where['chainId'] = { _eq: chainId };
-    where['timestamp'] = {
+    where.chainId = { _eq: chainId };
+    where.timestamp = {
       _gte: Math.floor(startTimeMs / 1000),
-      _lte: Math.floor(endTimeMs / 1000)
+      _lte: Math.floor(endTimeMs / 1000),
     };
 
     const query = `
@@ -394,7 +410,7 @@ export class EnvioClient {
       const data: any = await this.client.request(query, { where });
       return data[entityName] || [];
     } catch (error: any) {
-      logger.error({ error: error.message, eventType, chainId }, 'Envio raw events fetch failed');
+      logger.error({ error: error.message, eventType, chainId }, "Envio raw events fetch failed");
       return [];
     }
   }

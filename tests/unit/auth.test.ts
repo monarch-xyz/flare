@@ -1,7 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
-import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, Response } from "express";
+import { describe, expect, it, vi } from "vitest";
 
-type MockRequest = Partial<Request> & { path: string; header: (name: string) => string | undefined };
+type MockRequest = Partial<Request> & {
+  path: string;
+  header: (name: string) => string | undefined;
+};
 
 type MockResponse = Partial<Response> & {
   status: ReturnType<typeof vi.fn>;
@@ -10,14 +13,14 @@ type MockResponse = Partial<Response> & {
 
 const loadAuthMiddleware = async (apiKey: string) => {
   vi.resetModules();
-  vi.doMock('../../src/config/index.js', () => ({
+  vi.doMock("../../src/config/index.js", () => ({
     config: {
       api: {
         apiKey,
       },
     },
   }));
-  const { authMiddleware } = await import('../../src/api/middleware/auth.js');
+  const { authMiddleware } = await import("../../src/api/middleware/auth.js");
   return authMiddleware;
 };
 
@@ -30,10 +33,10 @@ const makeRes = (): MockResponse => {
   return res;
 };
 
-describe('auth middleware', () => {
-  it('Should allow requests when API_KEY is not set (dev mode)', async () => {
-    const authMiddleware = await loadAuthMiddleware('');
-    const req: MockRequest = { path: '/api/v1/foo', header: vi.fn() };
+describe("auth middleware", () => {
+  it("Should allow requests when API_KEY is not set (dev mode)", async () => {
+    const authMiddleware = await loadAuthMiddleware("");
+    const req: MockRequest = { path: "/api/v1/foo", header: vi.fn() };
     const res = makeRes();
     const next: NextFunction = vi.fn();
 
@@ -44,11 +47,11 @@ describe('auth middleware', () => {
     expect(res.json).not.toHaveBeenCalled();
   });
 
-  it('Should allow requests with valid x-api-key header', async () => {
-    const authMiddleware = await loadAuthMiddleware('secret');
+  it("Should allow requests with valid x-api-key header", async () => {
+    const authMiddleware = await loadAuthMiddleware("secret");
     const req: MockRequest = {
-      path: '/api/v1/foo',
-      header: vi.fn((name: string) => (name === 'x-api-key' ? 'secret' : undefined)),
+      path: "/api/v1/foo",
+      header: vi.fn((name: string) => (name === "x-api-key" ? "secret" : undefined)),
     };
     const res = makeRes();
     const next: NextFunction = vi.fn();
@@ -60,9 +63,9 @@ describe('auth middleware', () => {
     expect(res.json).not.toHaveBeenCalled();
   });
 
-  it('Should return 401 when x-api-key is missing and API_KEY is set', async () => {
-    const authMiddleware = await loadAuthMiddleware('secret');
-    const req: MockRequest = { path: '/api/v1/foo', header: vi.fn(() => undefined) };
+  it("Should return 401 when x-api-key is missing and API_KEY is set", async () => {
+    const authMiddleware = await loadAuthMiddleware("secret");
+    const req: MockRequest = { path: "/api/v1/foo", header: vi.fn(() => undefined) };
     const res = makeRes();
     const next: NextFunction = vi.fn();
 
@@ -70,14 +73,14 @@ describe('auth middleware', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    expect(res.json).toHaveBeenCalledWith({ error: "Unauthorized" });
   });
 
-  it('Should return 401 when x-api-key is invalid', async () => {
-    const authMiddleware = await loadAuthMiddleware('secret');
+  it("Should return 401 when x-api-key is invalid", async () => {
+    const authMiddleware = await loadAuthMiddleware("secret");
     const req: MockRequest = {
-      path: '/api/v1/foo',
-      header: vi.fn((name: string) => (name === 'x-api-key' ? 'wrong' : undefined)),
+      path: "/api/v1/foo",
+      header: vi.fn((name: string) => (name === "x-api-key" ? "wrong" : undefined)),
     };
     const res = makeRes();
     const next: NextFunction = vi.fn();
@@ -86,12 +89,12 @@ describe('auth middleware', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    expect(res.json).toHaveBeenCalledWith({ error: "Unauthorized" });
   });
 
-  it('Should always allow /health endpoint regardless of auth', async () => {
-    const authMiddleware = await loadAuthMiddleware('secret');
-    const req: MockRequest = { path: '/health', header: vi.fn(() => undefined) };
+  it("Should always allow /health endpoint regardless of auth", async () => {
+    const authMiddleware = await loadAuthMiddleware("secret");
+    const req: MockRequest = { path: "/health", header: vi.fn(() => undefined) };
     const res = makeRes();
     const next: NextFunction = vi.fn();
 
