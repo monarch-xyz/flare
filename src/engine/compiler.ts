@@ -47,8 +47,12 @@ export interface CompiledGroupCondition {
   type: "group";
   addresses: string[];
   requirement: { count: number; of: number };
-  /** The condition to evaluate for each address */
-  perAddressCondition: InternalCondition;
+  /** Optional per-condition window override */
+  window?: string;
+  /** How inner conditions combine (default: AND) */
+  logic?: "AND" | "OR";
+  /** Conditions to evaluate for each address */
+  perAddressConditions: InternalCondition[];
 }
 
 /**
@@ -60,6 +64,8 @@ export interface CompiledAggregateCondition {
   metric: MetricType;
   operator: ComparisonOp;
   value: number;
+  /** Optional per-condition window override */
+  window?: string;
   chainId: number;
   marketIds?: string[];
   addresses?: string[];
@@ -444,6 +450,7 @@ function compileThreshold(cond: ThresholdCondition, opts: CompileOptions = {}): 
     left,
     operator: OPERATOR_MAP[cond.operator],
     right: constant(cond.value),
+    window: cond.window?.duration,
   };
 }
 
@@ -502,6 +509,7 @@ function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): Intern
         left: current,
         operator: "lt",
         right: threshold,
+        window: cond.window?.duration,
       };
     }
     if (cond.direction === "increase") {
@@ -517,6 +525,7 @@ function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): Intern
         left: current,
         operator: "gt",
         right: threshold,
+        window: cond.window?.duration,
       };
     }
     // 'any' direction: |current - past| / past > percent
@@ -548,6 +557,7 @@ function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): Intern
         left: past,
         right: constant(1 - percentDecimal),
       },
+      window: cond.window?.duration,
     };
   }
   // Absolute change
@@ -566,6 +576,7 @@ function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): Intern
       left: diff,
       operator: "gt",
       right: constant(absoluteValue),
+      window: cond.window?.duration,
     };
   }
   if (cond.direction === "increase") {
@@ -581,6 +592,7 @@ function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): Intern
       left: diff,
       operator: "gt",
       right: constant(absoluteValue),
+      window: cond.window?.duration,
     };
   }
   // 'any' direction: abs(current - past) > absolute
@@ -596,6 +608,7 @@ function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): Intern
     left: diff,
     operator: "gt",
     right: constant(absoluteValue),
+    window: cond.window?.duration,
   };
 }
 
@@ -607,20 +620,29 @@ function compileChange(cond: ChangeCondition, opts: CompileOptions = {}): Intern
  * evaluator adds the user filter for each address at evaluation time.
  */
 function compileGroup(cond: GroupCondition): CompiledGroupCondition {
-  // Compile the inner condition with isGroupInner=true
-  // This skips address validation and omits user from filters
-  const innerCompiled = compileCondition(cond.condition, { isGroupInner: true });
-
-  // Group conditions can't be nested (inner must be a simple condition)
-  if ("type" in innerCompiled && innerCompiled.type === "group") {
-    throw new Error("Nested group conditions are not supported");
+  const innerConditions = cond.conditions ?? (cond.condition ? [cond.condition] : []);
+  if (innerConditions.length === 0) {
+    throw new Error("Group condition requires at least one inner condition");
   }
+
+  const compiledInner: InternalCondition[] = innerConditions.map((inner) => {
+    const compiled = compileCondition(inner, { isGroupInner: true });
+    if ("type" in compiled && compiled.type === "group") {
+      throw new Error("Nested group conditions are not supported");
+    }
+    if ("type" in compiled && compiled.type === "aggregate") {
+      throw new Error("Nested aggregate conditions are not supported in group");
+    }
+    return compiled as InternalCondition;
+  });
 
   return {
     type: "group",
     addresses: cond.addresses,
     requirement: cond.requirement,
-    perAddressCondition: innerCompiled as InternalCondition,
+    window: cond.window?.duration,
+    logic: cond.logic ?? "AND",
+    perAddressConditions: compiledInner,
   };
 }
 
@@ -648,6 +670,7 @@ function compileAggregate(cond: AggregateCondition): CompiledAggregateCondition 
     metric: cond.metric,
     operator: OPERATOR_MAP[cond.operator],
     value: cond.value,
+    window: cond.window?.duration,
     chainId: cond.chain_id,
     marketIds: cond.market_id ? [cond.market_id] : undefined,
     filters: cond.filters,

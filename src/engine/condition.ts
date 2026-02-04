@@ -103,6 +103,16 @@ function aggregateValues(
   }
 }
 
+function withWindowOverride(context: EvalContext, windowOverride?: string): EvalContext {
+  if (!windowOverride) return context;
+  const durationMs = parseDuration(windowOverride);
+  return {
+    ...context,
+    windowDuration: windowOverride,
+    windowStart: context.now - durationMs,
+  };
+}
+
 function buildAggregateTargets(
   cond: CompiledAggregateCondition,
 ): Array<{ marketId?: string; address?: string }> {
@@ -141,6 +151,7 @@ async function evaluateAggregateCondition(
   cond: CompiledAggregateCondition,
   context: EvalContext,
 ): Promise<boolean> {
+  const scopedContext = withWindowOverride(context, cond.window);
   const targets = buildAggregateTargets(cond);
   if (targets.length === 0) {
     throw new Error("Aggregate condition has no targets to evaluate");
@@ -157,7 +168,7 @@ async function evaluateAggregateCondition(
       target.address,
       cond.filters,
     );
-    const value = await evaluateNode(expression, context);
+    const value = await evaluateNode(expression, scopedContext);
     values.push(value);
   }
 
@@ -169,22 +180,38 @@ async function evaluateGroupCondition(
   cond: Extract<CompiledCondition, { type: "group" }>,
   context: EvalContext,
 ): Promise<boolean> {
+  const groupContext = withWindowOverride(context, cond.window);
   let triggeredCount = 0;
   const total = cond.addresses.length;
   const required = cond.requirement.count;
+  const innerLogic = cond.logic ?? "AND";
 
   for (let i = 0; i < total; i++) {
     const address = cond.addresses[i];
-    const left = applyUserFilterToNode(cond.perAddressCondition.left, address);
-    const right = applyUserFilterToNode(cond.perAddressCondition.right, address);
-    const triggered = await evaluateCondition(
-      left,
-      cond.perAddressCondition.operator,
-      right,
-      context,
-    );
+    let innerTriggered = innerLogic === "AND";
+    for (const innerCondition of cond.perAddressConditions) {
+      const left = applyUserFilterToNode(innerCondition.left, address);
+      const right = applyUserFilterToNode(innerCondition.right, address);
+      const innerContext = withWindowOverride(groupContext, innerCondition.window);
+      const triggered = await evaluateCondition(
+        left,
+        innerCondition.operator,
+        right,
+        innerContext,
+      );
 
-    if (triggered) {
+      if (innerLogic === "AND" && !triggered) {
+        innerTriggered = false;
+        break;
+      }
+      if (innerLogic === "OR" && triggered) {
+        innerTriggered = true;
+        break;
+      }
+      if (innerLogic === "OR") innerTriggered = false;
+    }
+
+    if (innerTriggered) {
       triggeredCount += 1;
       if (triggeredCount >= required) return true;
     }
@@ -201,7 +228,8 @@ async function evaluateCompiledCondition(
   context: EvalContext,
 ): Promise<boolean> {
   if (isSimpleCondition(cond)) {
-    return evaluateCondition(cond.left, cond.operator, cond.right, context);
+    const scopedContext = withWindowOverride(context, cond.window);
+    return evaluateCondition(cond.left, cond.operator, cond.right, scopedContext);
   }
   if (cond.type === "group") {
     return evaluateGroupCondition(cond, context);

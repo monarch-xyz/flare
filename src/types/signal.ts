@@ -60,6 +60,8 @@ export interface ThresholdCondition {
   metric: MetricType;
   operator: ComparisonOperator;
   value: number;
+  /** Optional per-condition window override */
+  window?: TimeWindow;
   /** Optional event-only filters (for event metrics) */
   filters?: Array<{
     field: string;
@@ -79,6 +81,8 @@ export interface ChangeCondition {
   metric: MetricType;
   direction: "increase" | "decrease" | "any";
   by: { percent: number } | { absolute: number };
+  /** Optional per-condition window override */
+  window?: TimeWindow;
   /** Chain ID (required) */
   chain_id: number;
   /** Market ID (required for Market/Position metrics) */
@@ -91,13 +95,19 @@ export interface GroupCondition {
   type: "group";
   /** Addresses to check */
   addresses: string[];
+  /** Optional per-condition window override */
+  window?: TimeWindow;
+  /** How inner conditions combine (default: AND) */
+  logic?: "AND" | "OR";
   /** N of M requirement */
   requirement: {
     count: number;
     of: number;
   };
-  /** Condition each address must meet */
-  condition: Condition;
+  /** Single condition each address must meet (legacy) */
+  condition?: Condition;
+  /** Multiple conditions each address must meet (preferred) */
+  conditions?: Condition[];
 }
 
 export interface AggregateCondition {
@@ -106,6 +116,8 @@ export interface AggregateCondition {
   metric: MetricType;
   operator: ComparisonOperator;
   value: number;
+  /** Optional per-condition window override */
+  window?: TimeWindow;
   /** Optional event-only filters (for event metrics) */
   filters?: Array<{
     field: string;

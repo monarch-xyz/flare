@@ -354,7 +354,7 @@ describe("Compiler", () => {
       expect(groupResult.type).toBe("group");
       expect(groupResult.addresses).toEqual(["0xa", "0xb", "0xc", "0xd", "0xe"]);
       expect(groupResult.requirement).toEqual({ count: 3, of: 5 });
-      expect(groupResult.perAddressCondition).toBeDefined();
+      expect(groupResult.perAddressConditions).toHaveLength(1);
     });
 
     it("compiles inner condition correctly", () => {
@@ -375,8 +375,9 @@ describe("Compiler", () => {
 
       const result = compileCondition(userCondition) as CompiledGroupCondition;
 
-      expect(result.perAddressCondition.type).toBe("condition");
-      expect(result.perAddressCondition.operator).toBe("lt");
+      expect(result.perAddressConditions).toHaveLength(1);
+      expect(result.perAddressConditions[0].type).toBe("condition");
+      expect(result.perAddressConditions[0].operator).toBe("lt");
     });
   });
 

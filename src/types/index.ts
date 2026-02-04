@@ -53,6 +53,8 @@ export interface Condition {
   left: ExpressionNode;
   operator: ComparisonOp;
   right: ExpressionNode;
+  /** Optional per-condition window override */
+  window?: string;
 }
 
 export interface SignalScope {

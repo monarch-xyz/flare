@@ -130,12 +130,13 @@ interface Condition {
   left: ExpressionNode;
   operator: "gt" | "gte" | "lt" | "lte" | "eq" | "neq";
   right: ExpressionNode;
+  window?: string;
 }
 
 type CompiledCondition =
   | Condition
-  | { type: "group"; addresses: string[]; requirement: { count: number; of: number }; perAddressCondition: Condition }
-  | { type: "aggregate"; aggregation: "sum" | "avg" | "min" | "max" | "count"; metric: string; operator: "gt" | "gte" | "lt" | "lte" | "eq" | "neq"; value: number; chainId: number; marketIds?: string[]; addresses?: string[] };
+  | { type: "group"; addresses: string[]; requirement: { count: number; of: number }; window?: string; logic?: "AND" | "OR"; perAddressConditions: Condition[] }
+  | { type: "aggregate"; aggregation: "sum" | "avg" | "min" | "max" | "count"; metric: string; operator: "gt" | "gte" | "lt" | "lte" | "eq" | "neq"; value: number; window?: string; chainId: number; marketIds?: string[]; addresses?: string[] };
 
 interface CompiledSignalDefinition {
   chains: number[];
@@ -290,12 +291,23 @@ N-of-M address logic.
   "type": "group",
   "addresses": ["0xa", "0xb", "0xc", "0xd", "0xe"],
   "requirement": { "count": 3, "of": 5 },
-  "condition": {
-    "type": "change",
-    "metric": "Morpho.Position.supplyShares",
-    "direction": "decrease",
-    "by": { "percent": 10 }
-  }
+  "logic": "AND",
+  "conditions": [
+    {
+      "type": "change",
+      "metric": "Morpho.Position.supplyShares",
+      "direction": "decrease",
+      "by": { "percent": 10 },
+      "window": { "duration": "3d" }
+    },
+    {
+      "type": "change",
+      "metric": "Morpho.Position.supplyShares",
+      "direction": "decrease",
+      "by": { "percent": 5 },
+      "window": { "duration": "1d" }
+    }
+  ]
 }
 ```
 
@@ -316,7 +328,7 @@ Aggregate values across scope.
 
 ## Example Signals (Composed Conditions)
 
-All conditions in a signal share the same `window`. Use `logic: "AND"` or `"OR"` to combine them.
+All conditions in a signal inherit the signal-level `window` by default. You can override per condition with `window: { duration: "..." }`.
 
 ### 1) Two Different State Checks (Market Stress)
 
@@ -346,7 +358,7 @@ All conditions in a signal share the same `window`. Use `logic: "AND"` or `"OR"`
 }
 ```
 
-### 2) State Change + State Change (Same Window)
+### 2) State Change + State Change (Mixed Windows)
 
 ```json
 {
@@ -359,6 +371,7 @@ All conditions in a signal share the same `window`. Use `logic: "AND"` or `"OR"`
       "metric": "Morpho.Position.supplyShares",
       "direction": "decrease",
       "by": { "percent": 20 },
+      "window": { "duration": "3d" },
       "chain_id": 1,
       "market_id": "0x...",
       "address": "0xwhale..."
@@ -368,6 +381,7 @@ All conditions in a signal share the same `window`. Use `logic: "AND"` or `"OR"`
       "metric": "Morpho.Market.totalSupplyAssets",
       "direction": "decrease",
       "by": { "percent": 15 },
+      "window": { "duration": "7d" },
       "chain_id": 1,
       "market_id": "0x..."
     }
@@ -403,7 +417,7 @@ All conditions in a signal share the same `window`. Use `logic: "AND"` or `"OR"`
 }
 ```
 
-**Note:** Per-condition windows (e.g., 2d vs 7d in the same signal) are not supported yet. If you need mixed timeframes, split into separate signals for now.
+**Note:** If a condition specifies `window`, it overrides the signal-level window for that condition only.
 
 ---
 

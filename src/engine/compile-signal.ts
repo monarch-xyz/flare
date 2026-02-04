@@ -149,6 +149,18 @@ function applyScopeToCondition(
   return next;
 }
 
+function validateConditionWindow(cond: DslCondition): void {
+  if (cond.window?.duration) {
+    validateDuration(cond.window.duration, "conditions.window.duration");
+  }
+  if (cond.type === "group") {
+    if (cond.condition) validateConditionWindow(cond.condition);
+    if (cond.conditions) {
+      for (const inner of cond.conditions) validateConditionWindow(inner);
+    }
+  }
+}
+
 function compileGroupWithScope(cond: GroupCondition, scope: SignalScope): CompiledCondition {
   if (!cond.addresses || cond.addresses.length === 0) {
     throw new ValidationError("Group conditions require at least one address", "addresses");
@@ -165,6 +177,18 @@ function compileGroupWithScope(cond: GroupCondition, scope: SignalScope): Compil
       "requirement.count",
     );
   }
+  if (cond.condition && cond.conditions) {
+    throw new ValidationError(
+      "Group condition must specify either condition or conditions (not both)",
+      "condition",
+    );
+  }
+  if (!cond.condition && (!cond.conditions || cond.conditions.length === 0)) {
+    throw new ValidationError(
+      "Group condition requires at least one inner condition",
+      "condition",
+    );
+  }
   if (scope.addresses) {
     for (const address of cond.addresses) {
       if (!scope.addresses.includes(address)) {
@@ -172,32 +196,46 @@ function compileGroupWithScope(cond: GroupCondition, scope: SignalScope): Compil
       }
     }
   }
-  if (cond.condition.type === "group" || cond.condition.type === "aggregate") {
-    throw new ValidationError("Nested group/aggregate conditions are not supported", "condition");
+  const innerConditions = cond.conditions ?? (cond.condition ? [cond.condition] : []);
+  for (const innerCondition of innerConditions) {
+    if (innerCondition.type === "group" || innerCondition.type === "aggregate") {
+      throw new ValidationError(
+        "Nested group/aggregate conditions are not supported",
+        "condition",
+      );
+    }
   }
 
-  const inner =
-    cond.condition.type === "threshold" || cond.condition.type === "change"
-      ? applyScopeToCondition(cond.condition, scope, { includeAddress: false })
-      : cond.condition;
+  const compiledInner: ReturnType<typeof compileCondition>[] = [];
 
-  let compiledInner: ReturnType<typeof compileCondition>;
-  try {
-    compiledInner = compileCondition(inner, { isGroupInner: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to compile group condition";
-    throw new ValidationError(message, "condition");
-  }
+  for (const innerCondition of innerConditions) {
+    const inner =
+      innerCondition.type === "threshold" || innerCondition.type === "change"
+        ? applyScopeToCondition(innerCondition, scope, { includeAddress: false })
+        : innerCondition;
 
-  if (!isSimpleCondition(compiledInner)) {
-    throw new ValidationError("Group inner condition must be a simple condition", "condition");
+    let compiled: ReturnType<typeof compileCondition>;
+    try {
+      compiled = compileCondition(inner, { isGroupInner: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to compile group condition";
+      throw new ValidationError(message, "condition");
+    }
+
+    if (!isSimpleCondition(compiled)) {
+      throw new ValidationError("Group inner condition must be a simple condition", "condition");
+    }
+
+    compiledInner.push(compiled);
   }
 
   return {
     type: "group",
     addresses: cond.addresses,
     requirement: cond.requirement,
-    perAddressCondition: compiledInner,
+    window: cond.window?.duration,
+    logic: cond.logic ?? "AND",
+    perAddressConditions: compiledInner,
   };
 }
 
@@ -247,6 +285,7 @@ function compileAggregateWithScope(
     metric: cond.metric,
     operator: OPERATOR_MAP[cond.operator],
     value: cond.value,
+    window: cond.window?.duration,
     chainId,
     marketIds,
     addresses,
@@ -305,6 +344,7 @@ export function compileSignalDefinition(definition: SignalDefinition): StoredSig
   const compiledConditions: CompiledCondition[] = [];
 
   for (const rawCondition of definition.conditions) {
+    validateConditionWindow(rawCondition);
     let compiled: CompiledCondition;
     try {
       compiled = compileDslCondition(rawCondition, definition.scope);
@@ -316,7 +356,9 @@ export function compileSignalDefinition(definition: SignalDefinition): StoredSig
     if (isSimpleCondition(compiled)) {
       validateCondition(compiled);
     } else if (compiled.type === "group") {
-      validateCondition(compiled.perAddressCondition);
+      for (const inner of compiled.perAddressConditions) {
+        validateCondition(inner);
+      }
     }
 
     compiledConditions.push(compiled);

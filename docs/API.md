@@ -57,6 +57,8 @@ A signal is a JSON object with this shape:
 
 - `duration` uses `{number}{unit}` where unit is `s`, `m`, `h`, `d`, or `w`.
 - Example values: `30m`, `1h`, `7d`.
+- You can override per condition with `window: { duration: "..." }`.
+- Seconds are supported via the `s` unit (e.g., `3600s`).
 
 **Condition Types**
 
@@ -74,8 +76,9 @@ A signal is a JSON object with this shape:
 **`group`**
 - Evaluate a condition per address, then apply an N-of-M requirement.
 - `requirement.of` must equal the number of `addresses`.
-- Inner condition must NOT include `address` (it is injected per address).
+- Inner conditions must NOT include `address` (it is injected per address).
 - Nested `group` or `aggregate` is not supported.
+- You can provide a single `condition` or a list of `conditions` with optional `logic` (`AND` or `OR`).
 
 **`aggregate`**
 - Aggregate a metric across scope.
@@ -153,13 +156,51 @@ Example:
       "type": "change",
       "metric": "Morpho.Position.supplyShares",
       "direction": "decrease",
-      "by": { "percent": 20 }
+      "by": { "percent": 20 },
+      "window": { "duration": "6h" }
     }
   ]
 }
 ```
 
-**3. Group condition (2 of 3 whales exit)**
+**3. Group condition (multi-condition per address)**
+
+```json
+{
+  "scope": { "chains": [1], "markets": ["0xM"] },
+  "window": { "duration": "6h" },
+  "conditions": [
+    {
+      "type": "group",
+      "addresses": ["0xA", "0xB", "0xC"],
+      "requirement": { "count": 2, "of": 3 },
+      "logic": "AND",
+      "conditions": [
+        {
+          "type": "change",
+          "metric": "Morpho.Position.supplyShares",
+          "direction": "decrease",
+          "by": { "percent": 30 },
+          "window": { "duration": "3d" },
+          "market_id": "0xM",
+          "chain_id": 1
+        },
+        {
+          "type": "change",
+          "metric": "Morpho.Position.supplyShares",
+          "direction": "decrease",
+          "by": { "percent": 5 },
+          "window": { "duration": "1d" },
+          "market_id": "0xM",
+          "chain_id": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+**4. Group condition (single inner condition)**
 
 ```json
 {
@@ -183,7 +224,7 @@ Example:
 }
 ```
 
-**4. Aggregate event burst (count + size)**
+**5. Aggregate event burst (count + size)**
 
 ```json
 {

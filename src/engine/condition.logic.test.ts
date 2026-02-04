@@ -97,6 +97,68 @@ describe("SignalEvaluator logic", () => {
     expect(result.triggered).toBe(true);
   });
 
+  it("evaluates group conditions with multiple inner conditions per address", async () => {
+    const definition: SignalDefinition = {
+      scope: { chains: [1], markets: ["market-1"] },
+      window: { duration: "1h" },
+      conditions: [
+        {
+          type: "group",
+          addresses: ["0x1", "0x2"],
+          requirement: { count: 1, of: 2 },
+          logic: "AND",
+          conditions: [
+            {
+              type: "threshold",
+              metric: "Morpho.Position.supplyShares",
+              operator: ">",
+              value: 100,
+              chain_id: 1,
+              market_id: "market-1",
+            },
+            {
+              type: "threshold",
+              metric: "Morpho.Position.collateral",
+              operator: ">",
+              value: 50,
+              chain_id: 1,
+              market_id: "market-1",
+            },
+          ],
+        },
+      ],
+    };
+
+    const compiled = compileSignalDefinition(definition);
+
+    const fetcher: DataFetcher = {
+      fetchState: async (ref: StateRef) => {
+        const user = getFilterValue(ref, "user");
+        if (ref.field === "supplyShares") {
+          if (user === "0x1") return 150;
+          if (user === "0x2") return 150;
+        }
+        if (ref.field === "collateral") {
+          if (user === "0x1") return 60;
+          if (user === "0x2") return 10;
+        }
+        return 0;
+      },
+      fetchEvents: async () => 0,
+    };
+
+    const evaluator = new SignalEvaluator(fetcher);
+    const result = await evaluator.evaluate({
+      id: "sig-4",
+      chains: compiled.ast.chains,
+      window: compiled.ast.window,
+      conditions: compiled.ast.conditions,
+      logic: compiled.ast.logic,
+    });
+
+    expect(result.triggered).toBe(true);
+  });
+
   it("evaluates multi-condition AND logic", async () => {
     const definition: SignalDefinition = {
       scope: { chains: [1], markets: ["m1"] },

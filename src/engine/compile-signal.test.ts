@@ -98,6 +98,40 @@ describe("compileSignalDefinition", () => {
     expect(() => compileSignalDefinition(definition)).toThrow("address");
   });
 
+  it("rejects group with both condition and conditions", () => {
+    const definition: SignalDefinition = {
+      scope: { chains: [1], markets: ["m1"] },
+      window: { duration: "1h" },
+      conditions: [
+        {
+          type: "group",
+          addresses: ["0x1"],
+          requirement: { count: 1, of: 1 },
+          condition: {
+            type: "threshold",
+            metric: "Morpho.Position.supplyShares",
+            operator: ">",
+            value: 100,
+            chain_id: 1,
+            market_id: "m1",
+          },
+          conditions: [
+            {
+              type: "threshold",
+              metric: "Morpho.Position.supplyShares",
+              operator: ">",
+              value: 50,
+              chain_id: 1,
+              market_id: "m1",
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() => compileSignalDefinition(definition)).toThrow("condition");
+  });
+
   it("rejects aggregate market metric without markets", () => {
     const definition: SignalDefinition = {
       scope: { chains: [1] },
