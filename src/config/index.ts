@@ -36,6 +36,7 @@ export const config = {
   webhook: {
     timeoutMs: parseInt(process.env.WEBHOOK_TIMEOUT_MS ?? '10000', 10),
     maxRetries: parseInt(process.env.WEBHOOK_MAX_RETRIES ?? '3', 10),
+    secret: process.env.WEBHOOK_SECRET ?? '',
   },
 
   // Logging
